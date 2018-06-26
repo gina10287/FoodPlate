@@ -50,12 +50,6 @@
 #include "svgParse.h"
 #include "icpSolver.h"
 
-#include "LeastSquaresSparseSolver.h"
-
-
-//#include "Library\CXSparse\Demo\cs_ci_demo.h"
-//#include <time.h>
-
 # define PI 3.1415926
 
 using namespace std;
@@ -3762,10 +3756,6 @@ double colorError(Mat in_draw, Mat in_food)
 
 // resultStack - 3channel, foodAlpha - 1channel
 void imageOverlap(Mat &resultStack, Mat &foodAlpha, double &_iError, double &_ratio1, double &_ratio2) {
-	//Mat drawing0 = Mat::zeros(resultStack.size(), CV_8UC3);
-	//drawing0 = addTransparent(drawing0, resultStack);
-	//drawing0 = addTransparent(drawing0, foodAlpha);
-
 	int contourArea = 0, foodArea = 0, overlapArea = 0;
 	for (int i = 0; i < resultStack.cols; i += 2) {
 		for (int j = 0; j < resultStack.rows; j += 2) {
@@ -3774,16 +3764,11 @@ void imageOverlap(Mat &resultStack, Mat &foodAlpha, double &_iError, double &_ra
 				if (foodAlpha.at<Vec4b>(j, i)[3] > 0) {
 					foodArea++;
 					overlapArea++;
-					//circle(drawing0, Point(i, j), 1, Scalar(0, 255, 255), 1);
-				}
-				else {
-					//circle(drawing0, Point(i, j), 1, Scalar(0, 0, 255), 1);
 				}
 			}
 			else {
 				if (foodAlpha.at<Vec4b>(j, i)[3] > 0) {
 					foodArea++;
-					//circle(drawing0, Point(i, j), 1, Scalar(0, 255, 0), 1);
 				}
 			}
 		}
@@ -3801,8 +3786,6 @@ void imageOverlap(Mat &resultStack, Mat &foodAlpha, double &_iError, double &_ra
 		_ratio2 = (1-ratio2_tmp);
 		_iError = (1-ratio_tmp);
 	}
-	//imwrite("Result0/" + to_string(_ratio1) + "_" + to_string(_ratio2) + "_" + to_string(_iError) + ".png", drawing0);
-	//system("pause");
 }
 
 
@@ -3898,11 +3881,6 @@ void setAllError(frag &inputFrag, leafNode &cNode, int contourIdx) {
 	double _iErrorRatio1 = 0;
 	double _iErrorRatio2 = 0;
 	imageOverlapIndivi(sampleP1, inputFrag.warpImg, _iError, _iErrorRatio1, _iErrorRatio2);
-	
-	// set icp error
-	//double _icpError = inputFrag.icpError;
-	//if (_icpError > 0)
-		//_icpError = icpError(inputFrag.warpImg, sampleP1, inputFrag.fIndex);
 
 	// set icp error
 	double _icpError = icpError(inputFrag.warpImg, sampleP1, inputFrag.fIndex);
@@ -3910,12 +3888,10 @@ void setAllError(frag &inputFrag, leafNode &cNode, int contourIdx) {
 	inputFrag.setError(_eError, _cError, _rError, _iError, _iErrorRatio1, _iErrorRatio2, _icpError);
 
 	if (inputFrag.fAmount == 1) {
-		inputFrag.sError = _icpError;// _cError +_icpError;
-		//cout << "Icp Error = " << _icpError << endl;
+		inputFrag.sError = _icpError;
 	}
 	else {
-		inputFrag.sError = _iError;// _cError +_icpError;
-		//cout << "IError = " << _iError << endl;
+		inputFrag.sError = _iError;
 	}
 }
 
@@ -3940,19 +3916,8 @@ bool compareWithsError(frag input1, frag input2) {
 
 bool compareWithError_Suggest(foodSuggestedTable input1, foodSuggestedTable input2) {
 	double i, j;
-	/*if (input1.candidate.fAmount == 1 && input2.candidate.fAmount == 1) {
-		i = input1.candidate.sError;
-		j = input2.candidate.sError;
-	}
-	else if (input1.candidate.fAmount == 1) {
-		return(1 < 2);
-	}
-	else if (input1.candidate.fAmount == 2) {
-		return(1 > 2);
-	}*/
 	i = input1.candidate.iError;
 	j = input2.candidate.iError;
-
 	return(i<j);
 }
 
@@ -4043,56 +4008,6 @@ bool foodCombination(bool stackable, int countT, int &foodAmount, leafNode &cNod
 }
 
 // left right top bottom
-vector<int> getBoundaryIdx(vector<Point> &pointSeq, Size c_inputSize, Rect &rect) {
-	// count center, and border value
-	int top = c_inputSize.height, bottom = 0, left = c_inputSize.width, right = 0;
-	vector<int> result(4, 0);
-	for (int p = 0; p < pointSeq.size(); p ++) {
-		if (pointSeq[p].x < left) {
-			left = pointSeq[p].x; 
-			result[0] = p;
-		}
-		if (pointSeq[p].x > right) { 
-			right = pointSeq[p].x; 
-			result[1] = p;
-		}
-		if (pointSeq[p].y < top) {
-			top = pointSeq[p].y;
-			result[2] = p;
-		}
-		if (pointSeq[p].y > bottom) {
-			bottom = pointSeq[p].y; 
-			result[3] = p;
-		}
-	}
-	rect = Rect(left, top, right - left, bottom - top);
-	return result;
-}
-
-// left right top bottom
-Rect getBoundaryRectValue(Size c_inputSize, vector<Point> &pointSeq) {
-	// count center, and border value
-	int top = c_inputSize.height, bottom = 0, left = c_inputSize.width, right = 0;
-	Rect rect;
-	for (int p = 0; p < pointSeq.size(); p++) {
-		if (pointSeq[p].x < left) {
-			left = pointSeq[p].x;
-		}
-		if (pointSeq[p].x > right) {
-			right = pointSeq[p].x;
-		}
-		if (pointSeq[p].y < top) {
-			top = pointSeq[p].y;
-		}
-		if (pointSeq[p].y > bottom) {
-			bottom = pointSeq[p].y;
-		}
-	}
-	rect = Rect(left, top, right - left, bottom - top);
-	return rect;
-}
-
-// left right top bottom
 Rect getBoundaryRectAndAlpha(Mat img, Rect &rect, vector<Point> &nonAlpha) {
 	// count center, and border value
 	int top = img.rows, bottom = 0, left = img.cols, right = 0;
@@ -4165,265 +4080,14 @@ Point2f norVec(Point pre, Point tgt, Point nxt) {
 	return Point2f(norT[0], norT[1]);
 }
 
-int doCombination_Border_Descriptor(bool stackable, double scaleRatio, Size imgSize, int contourIdx, int foodImgIdx, vector<Mat> &descri1Seq, vector<Point> &pointSeq1, vector<Mat> &descri2Seq, vector<Point> &pointSeq2, Mat &dood, vector<Point> &nonAlphaOfFood, Mat &resultStack) {
-	// rescale food info
-	vector<Mat> descri_new = descri2Seq;
-	vector<Point> newSampleP = pointSeq2;
-	int combineFAmount = 0;
-	comp compDes(stackable, 0.4, imgSize, descri1Seq, descri_new, pointSeq1, newSampleP, contourIdx, foodImgIdx, dood, scaleRatio, nonAlphaOfFood);
-	if (compDes.fragList2().size() > 0) {
-		for (int i = 0; i < compDes.fragList2().size(); i++) {
-			combineFAmount += compDes.fragList2()[i].fAmount;
-			resultStack = addTransparent(resultStack, compDes.fragList2()[i].warpImg);
-			//imwrite("Result0/" + to_string(foodImgIdx) + "_" + to_string(isReverse) + "_" + to_string(i) + ".png", compDes.fragList2()[i].warpImg);
-		}
-		//imwrite("Result0/" + to_string(contourIdx) + "_" + to_string(foodImgIdx) + ".png", resultStack);
-		//system("pause");
-	}
-	return combineFAmount;
-}
-
 // icp algorithm, stack only outer contour
-int doCombination6Ori(vector<Point> pointSeq1, vector<Point> pointSeq2, Mat &dood, Mat &resultStack) {
-	cout << "------------------------------------------------ doCombination6 " << endl;
-
+int doCombination(vector<Point> pointSeq1, vector<Point> pointSeq2, Mat &dood, Mat &resultStack) {
+	cout << "------------------------------------------------ doCombination" <<  endl;
 	// get norm of pointSeq1 vec
 	vector<Point2f> normOfPointSeq1;
 	for (int idx1 = 0; idx1 < pointSeq1.size(); idx1++) {
 		normOfPointSeq1.push_back(norVec(pointSeq1[(idx1 - 1 + pointSeq1.size()) % pointSeq1.size()], pointSeq1[idx1], pointSeq1[(idx1 + 1) % pointSeq1.size()]));
 	}
-	//// get dist value from front point of pointSeq1
-	//vector<double> distValueOfPointSeq1;
-	//for (int idx1 = 1; idx1 < pointSeq1.size(); idx1++) {
-	//	distValueOfPointSeq1.push_back(pointDist(pointSeq1[idx1 - 1], pointSeq1[idx1]));
-	//	cout << pointSeq1[idx1 - 1] << ", " << pointSeq1[idx1] << endl;
-	//}
-
-	// get norm of pointSeq2 vec
-	vector<Point2f> normOfPointSeq2;
-	for (int idx2 = 0; idx2 < pointSeq2.size(); idx2++) {
-		normOfPointSeq2.push_back(norVec(pointSeq2[(idx2 - 1 + pointSeq2.size()) % pointSeq2.size()], pointSeq2[idx2], pointSeq2[(idx2 + 1) % pointSeq2.size()]));
-	}
-
-	clock_t s0 = clock();
-	int combineFAmount = 0;
-	Size imgSize = resultStack.size();
-
-	for (int idx1 = 0; idx1 < pointSeq1.size(); idx1++) {
-		bool fistTime = false;
-		double min_icpError = 1500;
-		int min_idx1 = idx1;
-		int min_idx2 = 0;
-		int min_range = 0;
-		Mat min_warpMatrix;
-
-		clock_t t0 = clock();
-		for (int idx2 = 0; idx2 < pointSeq2.size(); idx2 += 2) {
-			int range = max(3, min(pointSeq1.size(), pointSeq2.size())*0.5);
-			// init seqP1 for pointSeq1, from (idx1) ~ (idx1+range)
-			// init seqP2 for pointSeq2, from (idx2) ~ (idx2+range)
-			vector<Point> seqP1;
-			vector<Point> seqP2;
-			for (int rr = 0; rr < range; rr++) {
-				seqP1.push_back(pointSeq1[(idx1 + rr) % pointSeq1.size()]);
-				seqP2.push_back(pointSeq2[(idx2 + rr) % pointSeq2.size()]);
-			}
-			// get warp matrix and warp pointSeq
-			solver icpSolver;
-			Mat warpMat = icpSolver.getTwoSetsTransform(seqP2, seqP1);
-			// new_seqP2 = warpMat * seqP2
-			vector<Point> new_seqP2;
-			for (int rr = 0; rr < range; rr++)
-				new_seqP2.push_back(warpPoint(seqP2[rr], warpMat));
-			// calculate icp error and weight error
-			double icpError = icpSolver.getMinDistanceP(new_seqP2, seqP1);
-			//double weightError = ((double)(maxRange - range + 1) / (double)maxRange)*icpError;
-			// if current icp value is bigger that before, then break
-			if (icpError < min_icpError) {
-				// push valut to vec to deterMinimum
-				min_icpError = icpError;
-				min_idx1 = idx1;
-				min_idx2 = idx2;
-				min_range = range;
-				min_warpMatrix = warpMat;
-			}
-
-			// test and write image
-			Mat wwwarpImg = Mat::zeros(inputSize, CV_8UC4);
-			warpAffine(dood, wwwarpImg, warpMat, inputSize);
-			// for the first element
-			circle(wwwarpImg, seqP1[0], 3, Scalar(0, 0, 255, 255), 1);
-			circle(wwwarpImg, seqP1[1], 2, Scalar(0, 0, 255, 255), 1);
-			circle(wwwarpImg, warpPoint(seqP2[0], warpMat), 3, Scalar(0, 255, 0, 255), 1);
-			circle(wwwarpImg, warpPoint(seqP2[1], warpMat), 2, Scalar(0, 255, 0, 255), 1);
-			for (int rr = 2; rr < range; rr++) {
-				circle(wwwarpImg, seqP1[rr], 2, Scalar(0, 0, 255, 255), 2);
-				circle(wwwarpImg, warpPoint(seqP2[rr], warpMat), 2, Scalar(0, 255, 0, 255), 2);
-			}
-			//imwrite("Result0/" + to_string(idx1) + "_" + to_string(idx2) + "_" + to_string(range) + "_" + to_string(icpError) + ".png", wwwarpImg);
-			//system("pause");
-		}
-		clock_t t1 = clock();
-		//cout << "t1-t0= " << t1 - t0 << endl; system("pause");
-
-		// find a candidate
-		if (min_range > 0) {
-			// if stack outside, then break
-			Mat stackFood = Mat::zeros(inputSize, CV_8UC4);
-			warpAffine(dood, stackFood, min_warpMatrix, inputSize);
-			double iError = 0, ratio1 = 0, ratio2 = 0;
-			imageOverlapIndivi(pointSeq1, stackFood, iError, ratio1, ratio2);
-			double iError_2 = 0, ratio1_2 = 0, ratio2_2 = 0;
-			imageOverlap(resultStack, stackFood, iError_2, ratio1_2, ratio2_2);
-
-			// if overlap range of the last element  
-			if (ratio2 < 0.3 && ratio2_2 > 0.7) {
-
-				// find closest point for each food point
-				for (int j = 0; j < pointSeq2.size(); j++) {
-					Point p2 = warpPoint(pointSeq2[(min_idx2 + j) % pointSeq2.size()], min_warpMatrix);
-					for (int i = 0; i < pointSeq1.size(); i++) {
-						Point p1 = pointSeq1[(min_idx1 + i) % pointSeq1.size()];
-
-
-					}
-				}
-
-				// get min new_seqP1
-				vector<Point> min_seqP1;
-				vector<Point> min_seqP2;
-				for (int range = 0; range < min_range; range++) {
-					min_seqP1.push_back(pointSeq1[(min_idx1 + range) % pointSeq1.size()]);
-					min_seqP2.push_back(pointSeq2[(min_idx2 + range) % pointSeq2.size()]);
-				}
-
-				// warp to get min new_seqP2
-				vector<Point> min_new_seqP2;
-				for (int range = 0; range < min_range; range++) {
-					min_new_seqP2.push_back(warpPoint(min_seqP2[range], min_warpMatrix));
-				}
-
-				// partial icp to re shift
-				vector<Point> newSampleP;
-				tmpCompareWithoutDes(false, 5, resultStack.size(), pointSeq1, min_new_seqP2, Mat(), newSampleP, false, 1);
-
-				// get warp matrix and warp pointSeq
-				solver icpSolver;
-				min_warpMatrix = icpSolver.getTwoSetsTransform(min_seqP2, newSampleP).clone();
-				// icp warp iteration to get new_seqP2
-				for (int range = 0; range < min_range; range++) {
-					min_new_seqP2[range] = warpPoint(min_seqP2[range], min_warpMatrix);
-				}
-
-				/* ---------------------------- start to decide step size ---------------------------- */
-				// calculate walk step = (every step vector of pointSeq1) * (alpha difference pointSeq1 and pointSeq2)
-				double moveDistValue = 0;
-				int max_walkStep = 1;
-				double walkStep = 1;
-				vector<Point> add_seqP1; // use for test add point correct or not
-				vector<Point> add_seqP2; // use for test add point correct or not
-
-				for (int range = 1; range < min(pointSeq1.size(), pointSeq2.size()); range++, max_walkStep++) {
-					int normIdx1 = (min_idx1 + range) % pointSeq1.size();
-					int normIdx2 = (min_idx2 + range) % pointSeq2.size();
-					Point2f normVec1 = normOfPointSeq1[normIdx1];
-					Point2f normVec2 = warpNorm(normOfPointSeq2[normIdx2], min_warpMatrix);
-					// calculate cosTheta between normVec1 and normVec2
-					double cosTheta = ((normVec1.x * normVec2.x + normVec1.y * normVec2.y) / sqrt(pow(normVec1.x, 2) + pow(normVec1.y, 2) + pow(normVec2.x, 2) + pow(normVec2.y, 2)));
-					walkStep += cosTheta;
-					if (cosTheta < 0)
-						break;
-					if (range >= min_range) {
-						add_seqP1.push_back(pointSeq1[normIdx1]);
-						add_seqP2.push_back(warpPoint(pointSeq2[normIdx2], min_warpMatrix));
-					}
-				}
-				walkStep = max(1, walkStep);
-
-				// final result
-				if ((idx1 < pointSeq1.size()) || (double)(idx1 - pointSeq1.size()) < (double)(0.7*min_range)) {
-					// warp to get final image
-					Mat newFood = Mat::zeros(inputSize, CV_8UC4);
-					warpAffine(dood, newFood, min_warpMatrix, inputSize);
-					resultStack = addTransparent(resultStack, newFood);
-					// get result info
-					combineFAmount++;
-					idx1 += (int)(walkStep);
-				}
-
-				/* ---------------------------- end to decide step size ---------------------------- */
-				// test and write image
-				Mat wwwarpImg = Mat::zeros(inputSize, CV_8UC4);
-				warpAffine(dood, wwwarpImg, min_warpMatrix, inputSize);
-				// for the first element
-				circle(wwwarpImg, min_seqP1[0], 3, Scalar(0, 0, 255, 255), 1);
-				circle(wwwarpImg, min_seqP1[1], 2, Scalar(0, 0, 255, 255), 1);
-				circle(wwwarpImg, min_new_seqP2[0], 3, Scalar(0, 255, 0, 255), 1);
-				circle(wwwarpImg, min_new_seqP2[1], 2, Scalar(0, 255, 0, 255), 1);
-				for (int rr = 2; rr < min_range; rr++) {
-					circle(wwwarpImg, min_seqP1[rr], 2, Scalar(0, 0, 255, 255), 2);
-					circle(wwwarpImg, min_new_seqP2[rr], 2, Scalar(0, 255, 0, 255), 2);
-				}
-				//draw norm between normVec1 and normVec2
-				for (int range = 0; range < min_range; range++) {
-					int normIdx1 = (min_idx1 + range) % pointSeq1.size();
-					int normIdx2 = (min_idx2 + range) % pointSeq2.size();
-					Point2f normVec1 = normOfPointSeq1[normIdx1];
-					Point2f normVec2 = warpNorm(normOfPointSeq2[normIdx2], min_warpMatrix);
-					circle(wwwarpImg, min_seqP1[range], 3, Scalar(0, 0, 255, 255), 1);
-					circle(wwwarpImg, min_new_seqP2[range], 3, Scalar(0, 255, 0, 255), 1);
-					vector<Point> normPoint1 = getNormPoint(min_seqP1[range], normVec1);
-					vector<Point> normPoint2 = getNormPoint(min_new_seqP2[range], normVec2);
-					line(wwwarpImg, normPoint1[0], normPoint1[1], Scalar(0, 0, 255, 255), 1, 8);
-					line(wwwarpImg, normPoint2[0], normPoint2[1], Scalar(0, 255, 0, 255), 1, 8);
-				}
-				// use for test add point correct or not
-				for (int rr = 0; rr < add_seqP1.size(); rr++) {
-					circle(wwwarpImg, add_seqP1[rr], 1, Scalar(255, 0, 255, 255), 1);
-					circle(wwwarpImg, add_seqP2[rr], 1, Scalar(255, 255, 0, 255), 1);
-				}
-				for (int range = 0; range < add_seqP1.size(); range++) {
-					int normIdx1 = (min_idx1 + min_range + range) % pointSeq1.size();
-					int normIdx2 = (min_idx2 + min_range + range) % pointSeq2.size();
-					Point2f normVec1 = normOfPointSeq1[normIdx1];
-					Point2f normVec2 = warpNorm(normOfPointSeq2[normIdx2], min_warpMatrix);
-					circle(wwwarpImg, add_seqP1[range], 3, Scalar(255, 0, 255, 255), 1);
-					circle(wwwarpImg, add_seqP2[range], 3, Scalar(255, 255, 0, 255), 1);
-					vector<Point> normPoint1 = getNormPoint(add_seqP1[range], normVec1);
-					vector<Point> normPoint2 = getNormPoint(add_seqP2[range], normVec2);
-					line(wwwarpImg, normPoint1[0], normPoint1[1], Scalar(255, 0, 255, 255), 1, 8);
-					line(wwwarpImg, normPoint2[0], normPoint2[1], Scalar(255, 255, 0, 255), 1, 8);
-				}
-				imwrite("Result0/R_" + to_string(min_idx1) + "_" + to_string(min_idx2) + "_" + to_string(min_range) + "_" + to_string(ratio2) + ".png", wwwarpImg);
-				system("pause");
-			}
-		}
-		clock_t t2 = clock();
-		//cout << "t2-t1= " << t2 - t1 << endl;
-	}
-	clock_t s1 = clock();
-	cout << "Time of doCombination6= " << s1 - s0 << endl;
-
-	//imwrite("Result0/resultStack.png", resultStack);
-	//system("pause");
-	return combineFAmount;
-}
-
-// icp algorithm, stack only outer contour
-int doCombination6(vector<Point> pointSeq1, vector<Point> pointSeq2, Mat &dood, Mat &resultStack) {
-	cout << "------------------------------------------------ doCombination6 " <<  endl;
-	
-	// get norm of pointSeq1 vec
-	vector<Point2f> normOfPointSeq1;
-	for (int idx1 = 0; idx1 < pointSeq1.size(); idx1++) {
-		normOfPointSeq1.push_back(norVec(pointSeq1[(idx1 - 1 + pointSeq1.size()) % pointSeq1.size()], pointSeq1[idx1], pointSeq1[(idx1 + 1) % pointSeq1.size()]));
-	}
-	//// get dist value from front point of pointSeq1
-	//vector<double> distValueOfPointSeq1;
-	//for (int idx1 = 1; idx1 < pointSeq1.size(); idx1++) {
-	//	distValueOfPointSeq1.push_back(pointDist(pointSeq1[idx1 - 1], pointSeq1[idx1]));
-	//	cout << pointSeq1[idx1 - 1] << ", " << pointSeq1[idx1] << endl;
-	//}
 
 	// get norm of pointSeq2 vec
 	vector<Point2f> normOfPointSeq2;
@@ -4473,22 +4137,6 @@ int doCombination6(vector<Point> pointSeq1, vector<Point> pointSeq2, Mat &dood, 
 				min_range = range;
 				min_warpMatrix = warpMat;
 			}
-
-			// test and write image
-			Mat wwwarpImg = Mat::zeros(inputSize, CV_8UC4);
-			warpAffine(dood, wwwarpImg, warpMat, inputSize);
-			// for the first element
-			circle(wwwarpImg, seqP1[0], 3, Scalar(0, 0, 255, 255), 1);
-			circle(wwwarpImg, seqP1[1], 2, Scalar(0, 0, 255, 255), 1);
-			circle(wwwarpImg, warpPoint(seqP2[0],warpMat), 3, Scalar(0, 255, 0, 255), 1);
-			circle(wwwarpImg, warpPoint(seqP2[1], warpMat), 2, Scalar(0, 255, 0, 255), 1);
-			for (int rr = 2; rr < range; rr++) {
-				circle(wwwarpImg, seqP1[rr], 2, Scalar(0, 0, 255, 255), 2);
-				circle(wwwarpImg, warpPoint(seqP2[rr], warpMat), 2, Scalar(0, 255, 0, 255), 2);
-			}
-			//imwrite("Result0/" + to_string(idx1) + "_" + to_string(idx2) + "_" + to_string(range) + "_" + to_string(icpError) + ".png", wwwarpImg);
-			//system("pause");
-
 		}
 		clock_t t1 = clock();
 		//cout << "t1-t0= " << t1 - t0 << endl; system("pause");
@@ -4566,52 +4214,7 @@ int doCombination6(vector<Point> pointSeq1, vector<Point> pointSeq2, Mat &dood, 
 					combineFAmount++;
 					idx1 += (int)(walkStep);
 				}
-
 				/* ---------------------------- end to decide step size ---------------------------- */
-				// test and write image
-				Mat wwwarpImg = Mat::zeros(inputSize, CV_8UC4);
-				warpAffine(dood, wwwarpImg, min_warpMatrix, inputSize);
-				// for the first element
-				circle(wwwarpImg, min_seqP1[0], 3, Scalar(0, 0, 255, 255), 1);
-				circle(wwwarpImg, min_seqP1[1], 2, Scalar(0, 0, 255, 255), 1);
-				circle(wwwarpImg, min_new_seqP2[0], 3, Scalar(0, 255, 0, 255), 1);
-				circle(wwwarpImg, min_new_seqP2[1], 2, Scalar(0, 255, 0, 255), 1);
-				for (int rr = 2; rr < min_range; rr++) {
-					circle(wwwarpImg, min_seqP1[rr], 2, Scalar(0, 0, 255, 255), 2);
-					circle(wwwarpImg, min_new_seqP2[rr], 2, Scalar(0, 255, 0, 255), 2);
-				}
-				//draw norm between normVec1 and normVec2
-				for (int range = 0; range < min_range; range++) {
-					int normIdx1 = (min_idx1 + range) % pointSeq1.size();
-					int normIdx2 = (min_idx2 + range) % pointSeq2.size();
-					Point2f normVec1 = normOfPointSeq1[normIdx1];
-					Point2f normVec2 = warpNorm(normOfPointSeq2[normIdx2], min_warpMatrix);
-					circle(wwwarpImg, min_seqP1[range], 3, Scalar(0, 0, 255, 255), 1);
-					circle(wwwarpImg, min_new_seqP2[range], 3, Scalar(0, 255, 0, 255), 1);
-					vector<Point> normPoint1 = getNormPoint(min_seqP1[range], normVec1);
-					vector<Point> normPoint2 = getNormPoint(min_new_seqP2[range], normVec2);
-					line(wwwarpImg, normPoint1[0], normPoint1[1], Scalar(0, 0, 255, 255), 1, 8);
-					line(wwwarpImg, normPoint2[0], normPoint2[1], Scalar(0, 255, 0, 255), 1, 8);
-				}
-				// use for test add point correct or not
-				for (int rr = 0; rr < add_seqP1.size(); rr++) {
-					circle(wwwarpImg, add_seqP1[rr], 1, Scalar(255, 0, 255, 255), 1);
-					circle(wwwarpImg, add_seqP2[rr], 1, Scalar(255, 255, 0, 255), 1);
-				}
-				for (int range = 0; range < add_seqP1.size(); range++) {
-					int normIdx1 = (min_idx1 + min_range + range) % pointSeq1.size();
-					int normIdx2 = (min_idx2 + min_range + range) % pointSeq2.size();
-					Point2f normVec1 = normOfPointSeq1[normIdx1];
-					Point2f normVec2 = warpNorm(normOfPointSeq2[normIdx2], min_warpMatrix);
-					circle(wwwarpImg, add_seqP1[range], 3, Scalar(255, 0, 255, 255), 1);
-					circle(wwwarpImg, add_seqP2[range], 3, Scalar(255, 255, 0, 255), 1);
-					vector<Point> normPoint1 = getNormPoint(add_seqP1[range], normVec1);
-					vector<Point> normPoint2 = getNormPoint(add_seqP2[range], normVec2);
-					line(wwwarpImg, normPoint1[0], normPoint1[1], Scalar(255, 0, 255, 255), 1, 8);
-					line(wwwarpImg, normPoint2[0], normPoint2[1], Scalar(255, 255, 0, 255), 1, 8); 
-				}
-				imwrite("Result0/R_" + to_string(min_idx1) + "_" + to_string(min_idx2) + "_" + to_string(min_range) + "_" + to_string(ratio2) + ".png", wwwarpImg);
-				system("pause");
 			}
 		}
 		clock_t t2 = clock();
@@ -4619,14 +4222,11 @@ int doCombination6(vector<Point> pointSeq1, vector<Point> pointSeq2, Mat &dood, 
 	}
 	clock_t s1 = clock();
 	cout << "Time of doCombination6= " << s1 - s0 << endl;
-
-	//imwrite("Result0/resultStack.png", resultStack);
-	//system("pause");
 	return combineFAmount;
 }
 
 // stack only inner contour
-int doCombination66(Rect contourRect, vector<Point> pointSeq1, Mat contourAlpha, Mat &dood, Mat &resultStack, food &cFood) {
+int doCombinationInner(Rect contourRect, vector<Point> pointSeq1, Mat contourAlpha, Mat &dood, Mat &resultStack, food &cFood) {
 	Mat contourBorder = Mat::zeros(contourAlpha.size(), CV_8UC1);
 	drawContours(contourAlpha, vector<vector<Point>>(1, pointSeq1), 0, Scalar(255), 1, 8);
 
@@ -4680,25 +4280,9 @@ int doCombination66(Rect contourRect, vector<Point> pointSeq1, Mat contourAlpha,
 			combineFAmount++;
 			contourAlpha = alphaTmp.clone();
 			resultStack = resultTmp;
-
-			//imwrite("Result0/resultStack.png", resultStack);
-			//imwrite("Result0/contourAlpha.png", contourAlpha);
-
 			clock_t t6 = clock();
-			//cout << "doCombination t5 = " << t6 - t5 << endl;
 		}
-
-		/*cBottom = cTop;
-		cTop = contourRect.y + contourRect.height - heightCount*(foodRect.height) / 2;
-		cCenter = (cTop + cBottom) / 2;
-		cHeight = contourRect.y + contourRect.height - cTop;
-		cRect = Rect(cLeft, cTop, cWidth, cHeight);
-		Mat currentRectImg = contourAlpha(cRect);*/
-		//imshow("currentRectImg", currentRectImg);
 	}
-
-	//drawContours(resultStack, vector<vector<Point>>(1, pointSeq1), 0, Scalar(0, 0, 255, 255), 1, 8);
-
 	return combineFAmount;
 }
 
@@ -4750,19 +4334,6 @@ void doCompare(bool isReverse, fragList& pairSeq, leafNode &cNode, int contourId
 			Point pointCenter = cNode.centerOfContour[contourIdx];
 			Size imgSize = cNode.inputSize;
 
-			// test contour if their samplepoint is in the same direction
-			/*Mat testContour0 = Mat::zeros(cNode.inputSize, CV_8UC4);
-			drawContours(testContour0, vector<vector<Point>>(1, *pointSeq1), 0, Scalar(255, 0, 255, 255), 1, 8);
-			circle(testContour0, pointSeq1->at(0), 3, Scalar(255, 0, 255, 255), 2);
-			circle(testContour0, pointSeq1->at(3), 2, Scalar(255, 0, 255, 255), 2);
-			imwrite("testContour0_" + to_string(contourIdx) + "_" + to_string(isReverse) + ".png", testContour0);
-
-			Mat testContour = Mat::zeros(cNode.inputSize, CV_8UC4);
-			drawContours(testContour, vector<vector<Point>>(1, pointSeq2), 0, Scalar(255, 255, 0, 255), 1, 8);
-			circle(testContour, pointSeq2[0], 3, Scalar(255, 255, 0, 255), 2);
-			circle(testContour, pointSeq2[3], 2, Scalar(255, 255, 0, 255), 2);
-			imwrite("testContour_" + to_string(foodImgIdx) + "_" + to_string(isReverse) + ".png", testContour);*/
-
 			if (foodImgIdx == 77) {
 				if (!isReverse && doGridCut) {
 					comp compDes(imgSize, *pointSeq1, contourIdx, foodImgIdx, dood);
@@ -4796,73 +4367,22 @@ void doCompare(bool isReverse, fragList& pairSeq, leafNode &cNode, int contourId
 				int smallDis = 10;
 				int combineFAmount = 0;
 
-				if (contourCArea > foodContourArea*1.7) { //// food is far smaller than contour, use combination
+				if (contourCArea > foodContourArea*1.5) { //// food is far smaller than contour, use combination
 					cout << "combination -------------------- food= " << foodImgIdx << ", " << tmpFVec[f].name << endl;
 					Mat contourAlpha = Mat::zeros(cNode.inputSize, CV_8UC1);
 					drawContours(contourAlpha, vector<vector<Point>>(1, *pointSeq1), 0, Scalar(255), CV_FILLED);
 					Mat resultStack = Mat::zeros(cNode.inputSize, CV_8UC4);
 
-					combineFAmount += doCombination6Ori(*pointSeq1, pointSeq2, dood, resultStack);
-					//combineFAmount += doCombination6(*pointSeq1, pointSeq2, dood, resultStack);
-					combineFAmount += doCombination66(contourBoundary, *pointSeq1, contourAlpha, dood, resultStack, tmpFVec[f]);
+					combineFAmount += doCombination(*pointSeq1, pointSeq2, dood, resultStack);
+					combineFAmount += doCombinationInner(contourBoundary, *pointSeq1, contourAlpha, dood, resultStack, tmpFVec[f]);
 					
 					if (combineFAmount > 1) {
-						// shift to center
-						//Point centerOfResult = getCenterPoint2(resultStack);
-						//Mat trans_mat = (Mat_<double>(2, 3) << 1, 0, pointCenter.x - centerOfResult.x, 0, 1, pointCenter.y - centerOfResult.y);
-						//warpAffine(resultStack, resultStack, trans_mat, resultStack.size());
 						frag fragMax;
 						fragMax.setInfo(0, 0, 0, 0, contourIdx, foodImgIdx, combineFAmount, resultStack.clone());
 						tmpFrag.Element.push_back(fragMax);
-						//imwrite("Result0/" + to_string(foodImgIdx) + "_" + to_string(combineFAmount) + "_" + to_string(isReverse) + ".png", resultStack);
 					}
-
-					//// rescale food info
-					//vector<Mat> descri_new = descri2Seq;
-					//vector<Point> newSampleP = pointSeq2;
-					//foodSize = newSampleP.size();
-					//int combineFAmount = 0;
-					//comp compDes(stackable, 0.4, imgSize, *descri1Seq, descri_new, *pointSeq1, newSampleP, contourIdx, foodImgIdx, dood, cNode.scaleRatio, nonAlphaOfFood);
-					//if (compDes.fragList2().size() > 0) {
-					//	Mat resultStack = Mat::zeros(imgSize, CV_8UC4);
-					//	for (int i = 0; i < compDes.fragList2().size(); i++) {
-					//		combineFAmount += compDes.fragList2()[i].fAmount;
-					//		resultStack = addTransparent(resultStack, compDes.fragList2()[i].warpImg);
-					//		//imwrite("Result0/" + to_string(foodImgIdx) + "_" + to_string(isReverse) + "_" + to_string(i) + ".png", compDes.fragList2()[i].warpImg);
-					//		//double _scaleSize;
-					//	}
-					//	// start combination-----------------
-					//	bool isIn = false;
-					//	Mat resultStack2 = resultStack.clone();
-					//	vector<vector<Point> > new_contourPoint = getNewContour(imgSize, compDes.fragList2()[compDes.fragList2().size() - 1].alphaBinMat);
-					//	for (int ci = 0; ci < new_contourPoint.size(); ci++) {
-					//		if (new_contourPoint[ci].size() > 0) {
-					//			descri descriUser(new_contourPoint[ci], 1, cNode.scaleRatio);
-					//			vector<Point> c_new_contourPoint = new_contourPoint[ci];
-					//			descri c_descriUser = descriUser;
-					//			Mat c_resultStack = resultStack;
-					//			if (foodCombination(stackable, 0, combineFAmount, cNode, contourIdx, foodImgIdx, c_new_contourPoint, c_descriUser, newSampleP, descri_new, dood, c_resultStack, compDes.fragList2()[compDes.fragList2().size() - 1].alphaBinMat, nonAlphaOfFood)) {
-					//				isIn = true;
-					//				resultStack2 = addTransparent(resultStack2, c_resultStack);
-					//			}
-					//		}
-					//	}
-					//	if (isIn) {
-					//		resultStack = resultStack2.clone();
-					//	}
-					//	// -----------------end combination
-					//	if (combineFAmount == 1) { // change to icp to warp to center -> has alredy done in compare.cpp
-					//		tmpFrag.Element.push_back(compDes.fragList2()[0]);
-					//	}
-					//	else {
-					//		frag fragMax;
-					//		fragMax.setInfo(0, 0, 0, 0, contourIdx, foodImgIdx, combineFAmount, resultStack.clone());
-					//		imwrite("Result0/" + to_string(foodImgIdx) + "_" + to_string(combineFAmount) + ".png", resultStack);
-					//		tmpFrag.Element.push_back(fragMax);
-					//	}
-					//}
 				}
-				//cout << "contourCArea= " << contourCArea << ", foodContourArea= " << foodContourArea << endl;
+				
 				if (combineFAmount == 0 && contourCArea*3 > foodContourArea) {
 					cout << "icp ---------------------------- food= " << foodImgIdx << ", " << tmpFVec[f].name << endl;
 					//icp
@@ -4880,7 +4400,6 @@ void doCompare(bool isReverse, fragList& pairSeq, leafNode &cNode, int contourId
 						
 						frag fragMax;
 						fragMax.setInfo(0, 0, 0, 0, contourIdx, foodImgIdx, 1, newFood.clone());
-						//imwrite("Result0/" + to_string(foodImgIdx) + "_" + to_string(isReverse) + "_" + to_string(minIcpError) + ".png", newFood);
 						fragMax.icpError = minIcpError;
 						tmpFrag.Element.push_back(fragMax);
 					}
@@ -4902,28 +4421,16 @@ void doCompare(bool isReverse, fragList& pairSeq, leafNode &cNode, int contourId
 		}
 
 	}
-	//66666666666666666666666666666666666666666666  中途切換scale會出錯
 
 	sort(pairSeq.Element.begin(), pairSeq.Element.end(), compareWithiError);
 
-	// set error to all candidate
-	/*for (int k = 0; k < pairSeq.Element.size(); k++) {
-		Mat mmimg = pairSeq.Element[k].warpImg.clone();
-		drawContours(mmimg, vector<vector<Point>>(1, cNode.samplepointsOfDraw[contourIdx]), 0, Scalar(255, 0, 255, 255), 2, 8);
-		drawContours(mmimg, vector<vector<Point>>(1, pairSeq.Element[k].warpSequence), 0, Scalar(255, 255, 0, 255), 2, 8);
-		if (pairSeq.Element[k].fAmount == 1)
-			imwrite("Result0/" + to_string(pairSeq.Element[k].sError) + "_" + to_string(pairSeq.Element[k].fIndex) + "_" + to_string(k) + "_" + to_string(pairSeq.Element[k].fAmount) + ".png", mmimg);
-		else
-			imwrite("Result0/" + to_string(pairSeq.Element[k].sError) + "_" + to_string(pairSeq.Element[k].fIndex) + "_" + to_string(k) + "_" + to_string(pairSeq.Element[k].fAmount) + ".png", mmimg);
-	}*/
 
 	if (pairSeq.Element.size() > 1) {
 		pairSeq.Element.erase(pairSeq.Element.begin() + 1, pairSeq.Element.end());
 	}
-	//cout << "scaleRatio= " << cNode.scaleRatio << endl;
 } 
 
-/* --------------------------------End-------------------------------- */
+/* --------------------------------Testing-------------------------------- */
 void test_contourMat(leafNode &cNode) {
 	RNG rng(12345);
 	vector<Scalar> colorVec;

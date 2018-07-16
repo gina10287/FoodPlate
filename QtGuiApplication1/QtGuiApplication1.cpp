@@ -76,7 +76,7 @@ struct cateMap {
 	map<string, foodCate> Element;
 };
 
-vector<foodSuggestedTable> foodSuggestedIndex;
+vector<frag> foodSuggestedList;
 
 vector<leafNode> leafNodeVec;
 leafNode current_LeafNode;
@@ -88,13 +88,13 @@ vector<pair<string, int> >imgInfo;
 Mat dishImg = imread("Icon/dish.png", -1);
 
 /* folder name */
-string recipeDir("recipeBin/");
+string recipeDir("recipeBinC/");
 vector<string> recipeFileName;
 string preDataDir("preData_500/");
 string foodPreDir("bin500C/");
 string categoryImgDir("CategoryImg/");
 string inputImageDir("inputImg0/");
-string inputSVGDir("svgImg/");
+string inputSVGDir("svgImg/new/");
 
 /* Global Parameters of input image */
 Size inputSize(500, 500);
@@ -194,19 +194,20 @@ vector<food> getFoodVecFromStr(string name);
 /* Food Combination Function */
 
 /* Pre-Processing */
-void preProcess(string s_file, vector<vector<Point> >& samplePoint, string p_file, vector<vector<Mat> >& descriptor, string d_file, string d_file2, string d_file3, string d_file4);
+void preProcess(string s_file, vector<vector<Point> >& samplePoint, string p_file);
 vector<Mat> vecmatread(const string& filename); //store food descriptor
 vector<Point> vecPointRead(const string& filename); //store food samplePoint
 void getAllRecipe(string recipeDir, vector<string> &files, vector<recipe>& RecipeAll);
 void readFoodPreData(vector<food>& totalFood);
 void readBinaryImg(vector<Mat>& totalImg, string fileName);
-void getOverlapRatio(vector<food> &totalFood);
+void getOverlapRatio(food &totalFood, vector<Point> &pointSeq);
+Vec4b getFoodColor(Mat &foodImg);
 
 /* Image Processing */
 Mat doFlipMat(Mat &tmpWarpImg, Rect &rect);
 Point getCenterPoint(vector<Point> &pointSeq);
 vector<Point> getAllContourPoint(Mat &image);
-double tmpCompareWithoutDes(bool compareWhole, int iterationTimes, Size &inputSize, vector<Point> seqP1, vector<Point> seqP2, Mat &finalMat, vector<Point> &newSampleP, bool isReverse, int errorMode);
+double tmpCompareWithoutDes(bool compareWhole, int iterationTimes, Size &inputSize, vector<Point> seqP1, vector<Point> seqP2, Mat &finalMat, vector<Point> &newSampleP, int errorMode);
 void grouping(leafNode &cNode, vector<vector<Point> > &samplepointsOfDrawReverse);
 void getBorder(Mat &image, int& top, int& left, int& bottom, int& right);
 void reversePoint(Point center, vector<Point>& contourPoint); //reverse contour with center
@@ -219,20 +220,20 @@ Mat scaleIconImg(Mat foodImg); // scale img icon
 Mat scaleSuggestResultImg(Mat foodImg, vector<Point> &pointVec, Vec4b &color); // scale img icon
 
 /* Error Function */
-double colorError(Mat draw, Mat food); //color errorrefError
+double colorError(Vec4b contourColor, Vec4b foodColor ); //color errorrefError
 
 /* Comparison Value Function */
 bool compareContourSize(vector<Point> contour1, vector<Point> contour2);
 bool compareWithiError(frag input1, frag input2);
+bool compareWithiError_cError(frag input1, frag input2);
 bool compareWithsError(frag input1, frag input2);
-bool compareWithError_Suggest(foodSuggestedTable input1, foodSuggestedTable input2);
+bool compareWithError_Suggest(frag input1, frag input2);
 void setAllError(frag &inputFrag, leafNode &cNode, int contourIdx);
 
 /* Comparison Contour Function */
 void setFragToGroup(leafNode &cNode, int contourIdx1, fragList &fragList1, int contourIdx2, fragList &fragList2);
 int finGroupIdx(vector<vector<int> > &cGroupIdx, int idx);
-//void doCompare(bool isReverse, fragList& pairSeq, Mat& userDraw, vector<vector<Mat> >& descriptor, vector<vector<Point> >& sampleP, int contourIdx, food &currentFood, int recipeIdx, recipe& rec, bool doGridCut);
-void doCompare(bool isReverse, fragList& pairSeq, leafNode &cNode, int contourIdx, food &currentFood, bool doGridCut);
+void doCompare(bool userMove, fragList& pairSeq, leafNode &cNode, int contourIdx, food &currentFood);
 
 /* test function */
 void test_contourMat(leafNode &cNode);
@@ -345,7 +346,8 @@ void QtGuiApplication1::setLabelD(Mat &img) {
 	ui.label_show->setPixmap(resPix);
 }
 
-void QtGuiApplication1::setLabel(bool hasResultStack, Mat userDraw, Mat img, Point centerOfimg) {
+// has userDraw as background
+void QtGuiApplication1::setLabel_show(bool hasResultStack, Mat userDraw, Mat img, Point centerOfimg) {
 	Size dishSize = dishImg.size();
 	Size newSize(dishSize.width - 80, dishSize.height - 80);
 	cv::resize(img, img, newSize);
@@ -354,7 +356,7 @@ void QtGuiApplication1::setLabel(bool hasResultStack, Mat userDraw, Mat img, Poi
 	//  do same as overlayImage, just set transparent to 1/10
 	//Mat finalMat = overlayImage(dishImg, userDraw, Point((dishSize.width - newSize.width) / 2, (dishSize.height - newSize.height) / 2));
 	Mat finalMat = dishImg.clone();
-	Point startC((dishSize.width - newSize.width) / 2, (dishSize.height - newSize.height) / 2);
+	/*Point startC((dishSize.width - newSize.width) / 2, (dishSize.height - newSize.height) / 2);
 	for (int i = 0; i < userDraw.cols; i++) {
 		for (int j = 0; j < userDraw.rows; j++) {
 			if (userDraw.at<Vec4b>(j, i)[3] != 0) {
@@ -362,7 +364,7 @@ void QtGuiApplication1::setLabel(bool hasResultStack, Mat userDraw, Mat img, Poi
 				finalMat.at<Vec4b>(j + startC.y, i + startC.x)[3] /= 10;
 			}
 		}
-	}
+	}*/
 
 	if (hasResultStack)
 		finalMat = overlayImage(finalMat, img, Point((dishSize.width - newSize.width) / 2, (dishSize.height - newSize.height) / 2));
@@ -463,7 +465,7 @@ food getfoodCateFood(foodCate &foodC, int index) {
 	return tmpF;
 }
 
-void QtGuiApplication1::updateSuggestTable(QTableWidget *table, vector<Point> &pointVec, Vec4b &color, vector<foodSuggestedTable> &foodSuggestVec) {
+void QtGuiApplication1::updateSuggestTable(QTableWidget *table, vector<Point> &pointVec, Vec4b &color, vector<frag> &foodSuggestVec) {
 	sort(foodSuggestVec.begin(), foodSuggestVec.end(), compareWithError_Suggest);
 
 	table->clear();
@@ -476,7 +478,7 @@ void QtGuiApplication1::updateSuggestTable(QTableWidget *table, vector<Point> &p
 
 	for (int i = 0; i < foodSuggestVec.size(); i++) {
 		//food foodTmp = foodSuggestVec[i].sFood;
-		food foodTmp = totalFood[foodSuggestVec[i].candidate.fIndex];
+		food foodTmp = totalFood[foodSuggestVec[i].fIndex];
 
 		Mat modifyFoodImage = scaleIconImg(totalFoodImg[foodTmp.fileName]);
 		QPixmap pixelImage = QPixmap::fromImage(QImage((uchar*)modifyFoodImage.data, modifyFoodImage.cols, modifyFoodImage.rows, QImage::Format_ARGB32));
@@ -488,12 +490,13 @@ void QtGuiApplication1::updateSuggestTable(QTableWidget *table, vector<Point> &p
 		pCell->setToolTip(html);
 
 		//QTableWidgetItem *qItem = new QTableWidgetItem(codec->toUnicode(foodTmp.name.c_str()));
-		QTableWidgetItem *qItem = new QTableWidgetItem("_" + QString::number(foodSuggestVec[i].candidate.sError));// +"_" + QString::number(foodSuggestVec[i].candidate.iErrorRatio1) + "_" + QString::number(samplepointsOfFood[foodTmp.orderIdx].size()));
+		QTableWidgetItem *qItem = new QTableWidgetItem("_" + QString::number(foodSuggestVec[i].sError));// +"_" + QString::number(foodSuggestVec[i].candidate.iErrorRatio1) + "_" + QString::number(samplepointsOfFood[foodTmp.orderIdx].size()));
 
 		qItem->setTextAlignment(Qt::AlignCenter);
 		table->setItem(i, 1, qItem);
 
-		Mat modifyFoodImage2 = scaleSuggestResultImg(foodSuggestVec[i].candidate.warpImg, pointVec, color);
+		Mat modifyFoodImage2 = scaleSuggestResultImg(foodSuggestVec[i].warpImg, pointVec, color);
+
 		QPixmap pixelImage2 = QPixmap::fromImage(QImage((uchar*)modifyFoodImage2.data, modifyFoodImage2.cols, modifyFoodImage2.rows, QImage::Format_ARGB32));
 		QPixmap resPix2 = pixelImage2.scaled(75, 75, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 		QTableWidgetItem *pCell2 = new QTableWidgetItem();
@@ -796,7 +799,8 @@ void  QtGuiApplication1::removeAllFoodItem() {
 }
 
 void QtGuiApplication1::removeLeafNode(int column) {
-	cout << "column00= " << column << endl;
+	imwrite("Result0/leafNode.png", current_ptr->resultStack);
+	/*cout << "column00= " << column << endl;
 	cout << "column01= " << current_ptr->leafNodeVecIdx << endl;
 	if (column == current_ptr->leafNodeVecIdx) {
 		cout << "column10= " << column << endl;
@@ -814,8 +818,7 @@ void QtGuiApplication1::removeLeafNode(int column) {
 	for (int i = column; i < leafNodeVec.size(); i++) {
 		leafNodeVec[i].leafNodeVecIdx -= 1;
 	}
-
-	updateResultTable(1);
+	updateResultTable(1);*/
 }
 
 /* Remove new food item into ui.tableWidget */
@@ -855,13 +858,11 @@ void QtGuiApplication1::removeFoodItem(QTableWidgetItem* item) {
 void QtGuiApplication1::suggestFoodItem(QTableWidgetItem* item) {
 	if (item->column() == 2) {
 		int cRow = item->row();
-		if (cRow < foodSuggestedIndex.size()) {
-			//cout << "foodSuggestedIndex->size()= " << foodSuggestedIndex.size() << endl;
-
-			int c_contourIdx = foodSuggestedIndex.at(cRow).contourIdx;
+		if (cRow < foodSuggestedList.size()) {
+			int c_contourIdx = foodSuggestedList[cRow].cIndex;
 			//cout << "contour= " << c_contourIdx << endl;
 			fragList frag;
-			frag.Element.push_back(foodSuggestedIndex[cRow].candidate);
+			frag.Element.push_back(foodSuggestedList[cRow]);
 			current_ptr->sortedFragList[c_contourIdx] = frag;
 			//cout << "000000000000000" << current_ptr->addingOrder.size() << endl;
 			stackWithAddingOrder(*current_ptr);
@@ -912,11 +913,11 @@ void QtGuiApplication1::ResultIndexClicked(QTableWidgetItem* item) {
 	current_LeafNode = leafNodeVec[currentColumn];
 	current_ptr = &leafNodeVec[currentColumn];
 
-	setLabel(true, current_ptr->userDraw, current_ptr->resultStack, current_ptr->globalCenter);
+	setLabel_show(true, current_ptr->userDraw, current_ptr->resultStack, current_ptr->globalCenter);
 	setLabel_input(current_ptr->userDraw);
 
-	foodSuggestedIndex.clear();
-	updateSuggestTable(ui.tableWidget_3, vector<Point>(), Vec4b(), foodSuggestedIndex);
+	foodSuggestedList.clear();
+	updateSuggestTable(ui.tableWidget_3, vector<Point>(), Vec4b(), foodSuggestedList);
 }
 
 /* --------------------------------Nutrient Function-------------------------------- */
@@ -1009,7 +1010,7 @@ void QtGuiApplication1::applyClicked() {
 				iterSelectAmount++;
 			}
 			rec.print();
-			compareWithRecipeOri(current_LeafNode, rec, 0, 100);
+			compareWithRecipe(current_LeafNode, rec, 0, 100);
 		}
 		ui.progressBar->setValue(100);
 	}
@@ -1034,7 +1035,7 @@ void QtGuiApplication1::runAllReipeClicked() {
 			for (int j = 0; j < cateRecipe[recipeName].size(); j++) {
 				rec.addFood(cateRecipe[recipeName][j].name, foodInitialAmount, 0, cateRecipe[recipeName][j].category);
 			}
-			compareWithRecipeOri(current_LeafNode, rec, 100 / recipeFileName.size()*(i), 100 / recipeFileName.size()*(i + 1));
+			compareWithRecipe(current_LeafNode, rec, 100 / recipeFileName.size()*(i), 100 / recipeFileName.size()*(i + 1));
 			if (i == recipeFileName.size() - 1)
 				ui.progressBar->setValue(100);
 			else
@@ -1049,11 +1050,13 @@ void QtGuiApplication1::runAllReipeClicked() {
 	cout << "------------------------------------------------- finish" << endl;
 }
 
+string ProjectDir = "C:/Users/ec131b/Documents/Visual Studio 2013/Projects/QtGuiApplication2/QtGuiApplication1/";
 /* Run All Image Button Function */
 void QtGuiApplication1::runAllImageClicked() {
 	applyMode = 2;
 	clock_t t = clock();
-	int ss;
+	int imageAmount = 0;
+
 	if (foodSelectedIndex.Element.size() > 0) {
 		initClicked();
 
@@ -1064,10 +1067,19 @@ void QtGuiApplication1::runAllImageClicked() {
 			rec.addFood(iterSelect->first, iterSelectAmount->second[0], 0, iterSelect->second[0].category);
 			iterSelectAmount++;
 		}
+		rec.print();
 
 		vector<string> inputImageFileName;
-		getdir(inputImageDir, inputImageFileName);
-		ss = inputImageFileName.size();
+		getdir(inputSVGDir, inputImageFileName);
+
+		string Deputy = ".svg";
+		for (int i = inputImageFileName.size()-1; i >= 0; i--) {
+			std::size_t found = inputImageFileName[i].find(Deputy);
+			if (found == std::string::npos)
+				inputImageFileName.erase(inputImageFileName.begin() + i);
+		}
+		imageAmount = inputImageFileName.size();
+
 		for (int i = 0; i < inputImageFileName.size(); i++) {
 			bool isStop = false;
 			clock_t s1 = clock();
@@ -1077,8 +1089,8 @@ void QtGuiApplication1::runAllImageClicked() {
 				break;
 			}
 
-			openInputImage(inputImageDir + inputImageFileName[i]);
-			compareWithRecipeOri(current_LeafNode, rec, 100 / inputImageFileName.size()*(i), 100 / inputImageFileName.size()*(i + 1));
+			openInputImage(ProjectDir+inputSVGDir + inputImageFileName[i]);
+			compareWithRecipe(current_LeafNode, rec, 100 / inputImageFileName.size()*(i), 100 / inputImageFileName.size()*(i + 1));
 
 			clock_t s2 = clock();
 			pair<string, int> pp(inputImageFileName[i], s2 - s1);
@@ -1098,7 +1110,7 @@ void QtGuiApplication1::runAllImageClicked() {
 	}
 	ui.progressBar->setValue(100);
 	clock_t t1 = clock();
-	cout << "aver time: " << sumT / ss << endl;
+	cout << "aver time: " << sumT / imageAmount << endl;
 	cout << "total time: " << t1 - t << endl;
 	for (auto it = imgInfo.begin(); it != imgInfo.end(); it++)
 		cout << it->first << " " << it->second << endl;
@@ -1142,16 +1154,16 @@ void QtGuiApplication1::openInputImage(string filePath) {
 	
 	// setScale
 	scaleBtn_show();
-	setLabel(false, current_LeafNode.userDraw, current_LeafNode.userDraw, current_LeafNode.globalCenter);
+	setLabel_show(false, current_LeafNode.userDraw, current_LeafNode.userDraw, current_LeafNode.globalCenter);
 
 	current_ptr = &current_LeafNode;
 	if (current_ptr->preprocessingDone_B)
-		cout << "true" << endl;
+		cout << "preprocessingDone_B" << endl;
 	else
-		cout << "false" << endl;
+		cout << "preprocessingDone_B not" << endl;
+	//for (int i = 0; i < current_LeafNode.contourPoint.size(); i++)
+		//compareWithAllFood(current_LeafNode, i);
 
-	/*for (int i = 0; i < current_LeafNode.contourPoint.size(); i++)
-		compareWithAllFood(current_LeafNode, i);*/
 }
 
 void QtGuiApplication1::openImageClicked() {
@@ -1625,11 +1637,14 @@ QtGuiApplication1::QtGuiApplication1(QWidget *parent):QMainWindow(parent) {
 
 	/* -----------------PreProcessing----------------- */
 	// pre-process for contour descriptor and sample points
-	preProcess("foodDesSize.bin", samplepointsOfFood, "foodSample.bin", desOfFood, "foodDesSeq.bin", "foodDesSeq2.bin", "foodDesSeq3.bin", "foodDesSeq4.bin");
-	preProcess("foodDesSize_reverse.bin", samplepointsOfFoodReverse, "foodSample_reverse.bin", desOfFoodReverse, "foodDesSeq_reverse.bin", "foodDesSeq_reverse2.bin", "foodDesSeq_reverse3.bin", "foodDesSeq_reverse4.bin");
+	preProcess("foodDesSize.bin", samplepointsOfFood, "foodSample.bin");
+	//preProcess("foodDesSize.bin", samplepointsOfFood, "foodSample.bin", desOfFood, "foodDesSeq.bin", "foodDesSeq2.bin", "foodDesSeq3.bin", "foodDesSeq4.bin");
+	//preProcess("foodDesSize_reverse.bin", samplepointsOfFoodReverse, "foodSample_reverse.bin", desOfFoodReverse, "foodDesSeq_reverse.bin", "foodDesSeq_reverse2.bin", "foodDesSeq_reverse3.bin", "foodDesSeq_reverse4.bin");
 	readFoodPreData(totalFood);
-	getOverlapRatio(totalFood);
-	cout << "foodPredata" << endl;
+	for (int i = 0; i < totalFood.size(); i++)  {
+		vector<Point> food_pointSeq = samplepointsOfFood[totalFood[i].orderIdx];
+		getOverlapRatio(totalFood[i], food_pointSeq);
+	}
 
 	// get whole contour
 	for (int i = 0; i < samplepointsOfFood.size(); i++) {
@@ -1650,21 +1665,18 @@ QtGuiApplication1::QtGuiApplication1(QWidget *parent):QMainWindow(parent) {
 	readBinaryImg(tmpFoodImg, foodPreDir + "preFoodImgData4.bin");
 	readBinaryImg(tmpFoodImg, foodPreDir + "preFoodImgData5.bin");
 
-	/*for (int i = 0; i < samplepointsOfFood.size(); i++) {
+	/*for (int i = 0; i < sampleporecipeBinintsOfFood.size(); i++) {
 		Mat tmpD = Mat::zeros(Size(500, 500), CV_8UC3);
 		drawContours(tmpD, samplepointsOfFood, i, Scalar(255, 255, 255), 1, 8);
 		imwrite("preFood/food_" + to_string(i) + "_1.png", tmpD);
 	}
-	for (int i = 0; i < samplepointsOfFoodReverse.size(); i++) {
-		Mat tmpD = Mat::zeros(Size(500, 500), CV_8UC3);
-		drawContours(tmpD, samplepointsOfFoodReverse, i, Scalar(255, 255, 255), 1, 8);
-		imwrite("preFood/food_" + to_string(i) + "_2.png", tmpD);
-	}
+
 	for (int i = 0; i < tmpFoodImg.size(); i++)
 		imwrite("preFood/food_" + to_string(i) + "_0.png", tmpFoodImg[i]);*/
 
 	for (int i = 0; i < totalFood.size(); i++) {
 		totalFoodImg[totalFood[i].fileName] = tmpFoodImg[i];
+		totalFood[i].color = getFoodColor(tmpFoodImg[i]);
 		//imwrite("Result/" + to_string(i) + ".png", tmpFoodImg[i]);
 	}
 	//cout << "image PreData" << endl;
@@ -1678,7 +1690,7 @@ QtGuiApplication1::QtGuiApplication1(QWidget *parent):QMainWindow(parent) {
 	vector<recipe> RecipeFiles;
 	getdir(recipeDir, recipeFileName);
 
-	//getAllRecipe(recipeDir, recipeFileName, RecipeFiles);ginagina
+	getAllRecipe(recipeDir, recipeFileName, RecipeFiles);
 	removeFileExtension(recipeFileName); //remove ".bin"
 
 	/*food relate*/
@@ -1704,17 +1716,20 @@ QtGuiApplication1::QtGuiApplication1(QWidget *parent):QMainWindow(parent) {
 
 		for (int j = 0; j < RecipeFiles[i].size; j++) {
 			string recFoodName = RecipeFiles[i].foodName()[j];
-			food tmpF = getFoodVecFromStr(recFoodName)[0];
-			
-			cateRecipe[recipeFileName[i]].push_back(tmpF);
-			QTreeWidgetItem *leaf = new QTreeWidgetItem(root, QStringList() << codec->toUnicode(tmpF.name.c_str()));
-			Mat modifyFoodImage = scaleIconImg(totalFoodImg[tmpF.fileName]);
-			QPixmap pixelImage = QPixmap::fromImage(QImage((uchar*)modifyFoodImage.data, modifyFoodImage.cols, modifyFoodImage.rows, QImage::Format_ARGB32));
-			QPixmap resPix = pixelImage.scaled(80, 80);
-			leaf->setIcon(0, QIcon(resPix)); // set icon
+			vector<food> tmpFoodVec = getFoodVecFromStr(recFoodName);
+			if (tmpFoodVec.size() > 0) {
+				food tmpF = tmpFoodVec[0];
 
-			QString html = getToolTipQString(tmpF);
-			leaf->setToolTip(0, html);
+				cateRecipe[recipeFileName[i]].push_back(tmpF);
+				QTreeWidgetItem *leaf = new QTreeWidgetItem(root, QStringList() << codec->toUnicode(tmpF.name.c_str()));
+				Mat modifyFoodImage = scaleIconImg(totalFoodImg[tmpF.fileName]);
+				QPixmap pixelImage = QPixmap::fromImage(QImage((uchar*)modifyFoodImage.data, modifyFoodImage.cols, modifyFoodImage.rows, QImage::Format_ARGB32));
+				QPixmap resPix = pixelImage.scaled(80, 80);
+				leaf->setIcon(0, QIcon(resPix)); // set icon
+
+				QString html = getToolTipQString(tmpF);
+				leaf->setToolTip(0, html);
+			}
 		}
 		rootList << root;
 	}
@@ -1920,6 +1935,21 @@ QtGuiApplication1::QtGuiApplication1(QWidget *parent):QMainWindow(parent) {
 	//ui.tableWidget->installEventFilter(this);
 	//ui.tableWidget->viewport()->installEventFilter(this);
 	qApp->installEventFilter(this);
+
+
+
+	/*Mat userImage0 = imread("img.png", -1);
+	vector<vector<Point> > userDrawContours0;
+	vector<Vec4i> hierarchy0;
+	Mat cannyColor0 = cannyThreeCh(userImage0, true);
+	findContours(cannyColor0.clone(), userDrawContours0, hierarchy0, CV_RETR_CCOMP, CV_CHAIN_APPROX_NONE, Point(0, 0));
+
+	Mat imgTesting = Mat::zeros(userImage0.size(), CV_8UC4);
+	for (int i = 0; i < userDrawContours0.size(); i++) {
+			drawContours(imgTesting, vector<vector<Point>>(1, userDrawContours0[i]), 0, Scalar(255, 255, 255, 255), 1, 8);
+	}
+	imshow("R.png", imgTesting);*/
+
 }
 
 bool mouseIsOnImage = false;
@@ -1937,7 +1967,7 @@ void QtGuiApplication1::mouseDragOnImage(leafNode &cNode, int state, int cValue)
 		if (c_inputSize.width < c_inputSize.height) { longest = c_inputSize.height; }
 
 		// draw border to show which contour is dragged
-		Mat ImgTmp;
+		Mat ImgTmp = Mat::zeros(Size(topLabelSize, topLabelSize), CV_8UC4);;
 		cv::resize(cNode.userDraw, ImgTmp, Size(topLabelSize, topLabelSize));
 		vector<Point> tmpSampleP = cNode.samplepointsOfDrawOri[cValue];
 		double ratioW = (double)topLabelSize / (double)cNode.inputSize.width;
@@ -1948,7 +1978,6 @@ void QtGuiApplication1::mouseDragOnImage(leafNode &cNode, int state, int cValue)
 		}
 		for (int j = 0; j < tmpSampleP.size(); j++)
 			circle(ImgTmp, tmpSampleP[j], 2, Scalar(0, 0, 0, 255), 2);
-
 		setLabel_input(ImgTmp);
 	}
 	else {
@@ -2012,7 +2041,7 @@ bool QtGuiApplication1::eventFilter(QObject *obj, QEvent *event) {
 			if (c_column == 0) {
 				mouseDraged = true;
 				selectFoodIdx = c_row;
-				selectFood = foodSuggestedIndex[selectFoodIdx].sFood;
+				selectFood = totalFood[foodSuggestedList[selectFoodIdx].fIndex];
 			}
 		}
 
@@ -2069,10 +2098,14 @@ Mat doFlipMat(Mat &tmpWarpImg, Rect &rect) {
 
 	int minX = rect.x, maxX = rect.x + rect.width;
 	//do flip image
-	for (int wc = 0; wc < tmpWarpImg.cols; wc++)
-		for (int wr = 0; wr < tmpWarpImg.rows; wr++)
-			if (tmpWarpImg.at<Vec4b>(wr, wc)[3] != 0)
-				flipWarpImg.at<Vec4b>(wr, (minX + maxX) - wc) = tmpWarpImg.at<Vec4b>(wr, wc);
+	for (int wc = 0; wc < tmpWarpImg.cols; wc++) {
+		for (int wr = 0; wr < tmpWarpImg.rows; wr++) {
+			int wValue = (minX + maxX) - wc;
+			if (tmpWarpImg.at<Vec4b>(wr, wc)[3] != 0 && wValue >= 0 && wValue < tmpWarpImg.cols) {
+				flipWarpImg.at<Vec4b>(wr, wValue) = tmpWarpImg.at<Vec4b>(wr, wc);
+			}
+		}
+	}
 	return flipWarpImg;
 }
 
@@ -2093,7 +2126,6 @@ vector<Point> getWholeContourByPoint(Size _inputSize, vector<Point> vecP) {
 	return SeqContoursTmp2[maxIdx];
 }
 
-
 vector<Point> getWholeContour(Mat &image) {
 	Mat tmp = Mat::zeros(image.size(), CV_8UC1);
 	for (int fc = 0; fc < image.cols; fc++)
@@ -2113,14 +2145,43 @@ vector<Point> getWholeContour(Mat &image) {
 	vector<vector<Point>> SeqContoursTmp2;
 	findContours(dst, SeqContoursTmp2, CV_RETR_CCOMP, CV_CHAIN_APPROX_NONE);
 	// find max contour
-	int maxIdx = 0, maxNum = 0;
+	int maxIdx = -1, maxNum = 0;
 	for (int j = 0; j < SeqContoursTmp2.size(); j++) {
 		if (SeqContoursTmp2[j].size() > maxNum) {
 			maxIdx = j;
 			maxNum = SeqContoursTmp2[j].size();
 		}
 	}
-	return SeqContoursTmp2[maxIdx];
+	if (maxIdx >= 0)
+		return SeqContoursTmp2[maxIdx];
+	else
+		return vector<Point>();
+}
+
+vector<Point>  getContourBiggerThanSize(Mat &image, int foodContourArea, Point &center) {
+	vector<vector<Point>> SeqContoursTmp2;
+	findContours(image, SeqContoursTmp2, CV_RETR_CCOMP, CV_CHAIN_APPROX_NONE);
+
+	vector<Point> result;
+	// find max contour
+	int maxIdx = 0, maxNum = 0;
+	double minDist = 500;
+	int minIdx = 0;
+	for (int j = 0; j < SeqContoursTmp2.size(); j++) {
+		double Dist = pointPolygonTest(SeqContoursTmp2[j], center, true);
+		if (Dist >= 0) {
+			return SeqContoursTmp2[j];
+		}
+		if (abs(Dist) < minDist) {
+			minDist = abs(Dist);
+			minIdx = j;
+			result = SeqContoursTmp2[j];
+		}
+		/*if (contourArea(SeqContoursTmp2[j]) > foodContourArea) {
+			result.push_back(SeqContoursTmp2[j]);
+		}*/
+	}
+	return result;
 }
 
 // for channel 1
@@ -2180,7 +2241,7 @@ vector<vector<Point> > reScaleFood2(Mat doo, Size &cSize, vector<Point> smapleP,
 		Mat doo33;
 		warpAffine(doo22, doo33, rot_mat, Size(cSize.width, cSize.height));
 		rotateMat.push_back(doo33.clone());
-		drawContours(doo33, vector<vector<Point>>(1, descriUser.sampleResult()), 0, Scalar(255, 0, 255, 255), 2, 8);
+		//drawContours(doo33, vector<vector<Point>>(1, descriUser.sampleResult()), 0, Scalar(255, 0, 255, 255), 2, 8);
 		//imwrite("Result0/123/" + to_string(rotateAngle[i]) + "_" + to_string(i) + ".png", doo33);
 	}
 	//system("pause");
@@ -2228,16 +2289,48 @@ void prePocessOfUserDraw_A(leafNode &cNode, double scaleSize) {
 
 // samplePoint, descri
 void prePocessOfUserDraw_B(leafNode &cNode) {
+	cout << "-------------------------@@@@@@@@@@@@@@@@@---------------------------- prePocessOfUserDraw_B" << endl;
 	cNode.scaleRatio = globalScaleSize;
-	cNode.desOfDraw.clear();
 	cNode.samplepointsOfDraw.clear();
+	cNode.stackOfContour.clear();
 
 	for (int i = 0; i < cNode.contourAmount; i++) {
 		vector<Point> userDrawContours(cNode.contourPoint[i].begin(), cNode.contourPoint[i].end());
 		descri descriUser(userDrawContours, 1, cNode.scaleRatio);
 		cNode.samplepointsOfDraw.push_back(descriUser.sampleResult());
-		cNode.desOfDraw.push_back(descriUser.seqDescri());
 	}
+
+	cNode.stackOfContour.resize(cNode.samplepointsOfDraw.size());
+	for (int i = 0; i < cNode.samplepointsOfDraw.size(); i++) {
+		cNode.stackOfContour[i] = true;
+		Mat imgI = Mat::zeros(cNode.inputSize, CV_8UC1);
+		drawContours(imgI, vector<vector<Point> >(1, cNode.samplepointsOfDraw[i]), 0, Scalar(255), CV_FILLED);
+		Mat imgJ = Mat::zeros(cNode.inputSize, CV_8UC1);
+
+		for (int j = i + 1; j < cNode.samplepointsOfDraw.size(); j++) {
+			if (i != j) {
+				drawContours(imgJ, vector<vector<Point> >(1, cNode.samplepointsOfDraw[j]), 0, Scalar(255), CV_FILLED);
+			}
+		}
+
+		int overlap = 0;
+		for (int cols = 0; cols < cNode.inputSize.width; cols++) {
+			for (int rows = 0; rows < cNode.inputSize.height; rows++) {
+				if (imgI.at<uchar>(rows, cols) > 0 && imgJ.at<uchar>(rows, cols) > 0) {
+					overlap++;
+				}
+			}
+		}
+
+		if (overlap>0.1*contourArea(cNode.samplepointsOfDraw[i]))
+			cNode.stackOfContour[i] = false;
+	}
+
+	/*for (int i = 0; i < cNode.samplepointsOfDraw.size(); i++) {
+		Mat imgI = Mat::zeros(cNode.inputSize, CV_8UC1);
+		drawContours(imgI, vector<vector<Point> >(1, cNode.samplepointsOfDraw[i]), 0, Scalar(255), CV_FILLED);
+		imwrite("Result0/" + to_string(i) + "_" + to_string(cNode.stackOfContour[i]) + ".png", imgI);
+	}*/
 
 	//// reset group
 	//for (int i = 0; i < cNode.groupWarpMatOrNot.size(); i++) {
@@ -2336,8 +2429,8 @@ void QtGuiApplication1::ContourIndexClicked(leafNode &cNode) {
 	tmpRec.addFood(tmpFood.name, 10, 0, tmpFood.category);
 
 	fragList tmpPair;
-	doCompare(false, tmpPair, cNode, contourIdx_first, tmpFood, true);
-	//doCompare(true, tmpPair, cNode, contourIdx_first, tmpFood, true);
+	doCompare(true, tmpPair, cNode, contourIdx_first, tmpFood);
+
 	if (tmpPair.Element.size() > 0) {
 		// if selectContourIdx is the first in its group
 		if (contourIdx_first == contourIdx) {
@@ -2377,10 +2470,10 @@ void QtGuiApplication1::compareWithAllFood(leafNode &cNode, int cValue) {
 
 		// if current contourIdx has no foodSuggestedVec
 		if (cNode.foodSuggestedVec[contourIdx].size() > 0) {
-			foodSuggestedIndex = cNode.foodSuggestedVec[contourIdx];
+			foodSuggestedList = cNode.foodSuggestedVec[contourIdx];
 		}
 		else {
-			vector<foodSuggestedTable> c_foodSuggestedIdx;
+			vector<frag> c_foodSuggestedIdx;
 			int sGroupIdx_I = finGroupIdx(cNode.groupIdx, contourIdx);
 			int contourIdx_first = cNode.groupIdx[sGroupIdx_I][0];
 
@@ -2395,18 +2488,11 @@ void QtGuiApplication1::compareWithAllFood(leafNode &cNode, int cValue) {
 					food tmpF = iterFood->second[0];
 
 					fragList tmpFrag;
-					doCompare(false, tmpFrag, cNode, contourIdx_first, tmpF, false);
-					//doCompare(true, tmpFrag, cNode, contourIdx_first, tmpF, false);
+					doCompare(false, tmpFrag, cNode, contourIdx_first, tmpF);
 
-					if (tmpFrag.Element.size() > 0) {
-						//if (tmpFrag.Element[0].iError < 0.3) {
-						if ((tmpFrag.Element[0].fAmount > 1 && tmpFrag.Element[0].sError < 0.3) || (tmpFrag.Element[0].fAmount == 1 && (tmpFrag.Element[0].sError < 100 || tmpFrag.Element[0].iError < 0.3))) {
-							foodSuggestedTable tmpTable;
-							tmpTable.contourIdx = contourIdx_first;
-							tmpTable.sFood = tmpF;
-							tmpTable.candidate = tmpFrag.Element[0];
-							tmpTable.candidate.warpSequence = getWholeContour(tmpTable.candidate.warpImg);
-							c_foodSuggestedIdx.push_back(tmpTable);
+					for (int fragS = 0; fragS < tmpFrag.Element.size(); fragS++) {
+						if ((tmpFrag.Element[fragS].fAmount > 1 && tmpFrag.Element[fragS].iError < 0.3) || (tmpFrag.Element[fragS].fAmount == 1 && tmpFrag.Element[fragS].icpVarianceError < 100 && tmpFrag.Element[fragS].iError < 0.5)) {
+							c_foodSuggestedIdx.push_back(tmpFrag.Element[fragS]);
 						}
 					}
 				}
@@ -2417,54 +2503,29 @@ void QtGuiApplication1::compareWithAllFood(leafNode &cNode, int cValue) {
 				int contourIdx2 = cNode.groupIdx[sGroupIdx_I][j];
 
 				for (int k = 0; k < c_foodSuggestedIdx.size(); k++) {
-					foodSuggestedTable tmpTable;
-					tmpTable.contourIdx = contourIdx2;
-					tmpTable.sFood = c_foodSuggestedIdx[k].sFood;
-					tmpTable.candidate = c_foodSuggestedIdx[k].candidate;
-					Mat warpImgGroupOri = tmpTable.candidate.warpImg.clone();
+					frag tmpTable = c_foodSuggestedIdx[k];
+					tmpTable.cIndex = contourIdx2;
 
 					// do warp image
 					Mat tmpWarpImg = Mat::zeros(cNode.inputSize, CV_8UC4);
-					tmpWarpImg = RotateMat(tmpTable.candidate.warpImg, cNode.group[contourIdx2].angle);
+					tmpWarpImg = RotateMat(tmpTable.warpImg, cNode.group[contourIdx2].angle);
+
 					warpAffine(tmpWarpImg, tmpWarpImg, cNode.group[contourIdx2].warpMatOfContour, cNode.inputSize);
 					if (cNode.group[contourIdx2].flipOrNot)
-						tmpTable.candidate.warpImg = doFlipMat(tmpWarpImg, cNode.boundaryOfContour[contourIdx2]).clone();
+						tmpTable.warpImg = doFlipMat(tmpWarpImg, cNode.boundaryOfContour[contourIdx2]).clone();
 					else
-						tmpTable.candidate.warpImg = tmpWarpImg.clone();
-
-					imwrite("Result0/" + to_string(k) + ".png", tmpTable.candidate.warpImg);
-
-					// do warp point
-					tmpTable.candidate.warpSequence = getWholeContour(tmpTable.candidate.warpImg);
+						tmpTable.warpImg = tmpWarpImg.clone();
+					//imwrite("Result0/" + to_string(k) + ".png", tmpTable.candidate.warpImg);
 
 					cNode.foodSuggestedVec[contourIdx2].push_back(tmpTable);
 				}
-
-				//cNode.foodSuggestedVec[contourIdx2] = cNode.foodSuggestedVec[contourIdx_first];
-				////cNode.foodSuggestedVec[contourIdx2] = c_foodSuggestedIdx;
-				//for (int k = 0; k < cNode.foodSuggestedVec[contourIdx2].size(); k++) {
-				//	foodSuggestedTable *tmpTable = &cNode.foodSuggestedVec[contourIdx2][k];
-				//	cNode.foodSuggestedVec[contourIdx2][k].contourIdx = contourIdx2;
-				//	Mat warpImgGroupOri = cNode.foodSuggestedVec[contourIdx2][k].candidate.warpImg.clone();
-
-				//	// do warp image
-				//	Mat tmpWarpImg = Mat::zeros(cNode.inputSize, CV_8UC4);
-				//	tmpWarpImg = RotateMat(cNode.foodSuggestedVec[contourIdx2][k].candidate.warpImg, cNode.group[contourIdx2].angle);
-				//	warpAffine(tmpWarpImg, tmpWarpImg, cNode.group[contourIdx2].warpMatOfContour, cNode.inputSize);
-				//	if (cNode.group[contourIdx2].flipOrNot)
-				//		cNode.foodSuggestedVec[contourIdx2][k].candidate.warpImg = doFlipMat(tmpWarpImg).clone();
-				//	else
-				//		cNode.foodSuggestedVec[contourIdx2][k].candidate.warpImg = tmpWarpImg.clone();
-				//	// do warp point
-				//	cNode.foodSuggestedVec[contourIdx2][k].candidate.warpSequence = getWholeContour(cNode.foodSuggestedVec[contourIdx2][k].candidate.warpImg);
-				//}
 			}
 		}
 		// store result to contour ans its group
-		foodSuggestedIndex = cNode.foodSuggestedVec[contourIdx];
+		foodSuggestedList = cNode.foodSuggestedVec[contourIdx];
 
 		ui.progressBar->setValue(100);
-		updateSuggestTable(ui.tableWidget_3, cNode.contourPoint[contourIdx], cNode.colorOfContour[contourIdx], foodSuggestedIndex);
+		updateSuggestTable(ui.tableWidget_3, cNode.contourPoint[contourIdx], cNode.colorOfContour[contourIdx], foodSuggestedList);
 		qApp->processEvents();
 
 		clock_t end = clock();
@@ -2472,7 +2533,7 @@ void QtGuiApplication1::compareWithAllFood(leafNode &cNode, int cValue) {
 	}
 }
 
-void QtGuiApplication1::compareWithRecipeOri(leafNode &cNode, recipe& rec2, int progressValue0, int progressValue1) {
+void QtGuiApplication1::compareWithRecipe(leafNode &cNode, recipe& rec2, int progressValue0, int progressValue1) {
 	clock_t start = clock();
 	if (!cNode.preprocessingDone_B) {
 		preprocessBinit(cNode);
@@ -2484,12 +2545,9 @@ void QtGuiApplication1::compareWithRecipeOri(leafNode &cNode, recipe& rec2, int 
 
 	// compare contour according to group
 	for (int i = 0; i < cNode.groupIdx.size(); i++) {
+		// set progressing bar
 		if (applyMode == 0) { ui.progressBar->setValue(100 / cNode.groupIdx.size() * (i + 1)); }
 		else { ui.progressBar->setValue(progressValue0 + ((progressValue1 - progressValue0) / cNode.groupIdx.size() * (i + 1))); }
-		bool doGridCut = true;
-		/*bool doGridCut = false;
-		if (cNode.groupIdx[i].size() == 1)
-			doGridCut = true;*/
 
 		int contourIdx1 = cNode.groupIdx[i][0];
 		vector<fragList> pairSeq(rec2.size);
@@ -2497,23 +2555,20 @@ void QtGuiApplication1::compareWithRecipeOri(leafNode &cNode, recipe& rec2, int 
 		for (int j = 0; j < rec2.size; j++)	{
 			food tmpFood;
 			tmpFood.setInitial(rec2.foodName()[j], rec2.foodName()[j], rec2.foodCategory()[j], 0, 0);
-			doCompare(false, pairSeq[j], cNode, contourIdx1, tmpFood, doGridCut);
-			//doCompare(true, pairSeq[j], cNode, contourIdx1, tmpFood, doGridCut);
+			doCompare(false, pairSeq[j], cNode, contourIdx1, tmpFood);
 		}
 		// every food push the best to foodCandidate
 		for (int j = 0; j < rec2.size; j++)
 			for (int k = 0; k < pairSeq[j].Element.size(); k++)
 				if (pairSeq[j].Element.size()>0)
 					sortedFragList[contourIdx1].Element.push_back(pairSeq[j].Element[0]);
-		sort(sortedFragList[contourIdx1].Element.begin(), sortedFragList[contourIdx1].Element.end(), compareWithiError);
+		sort(sortedFragList[contourIdx1].Element.begin(), sortedFragList[contourIdx1].Element.end(), compareWithiError_cError);
 		
 		// decide the adding order
 		if (sortedFragList[contourIdx1].Element.size()>0) {
-
 			for (int j = 0; j < sortedFragList[contourIdx1].Element.size(); j++) {
-				imwrite("Result0/AAA_" + to_string(sortedFragList[contourIdx1].Element[j].cIndex) + to_string(sortedFragList[contourIdx1].Element[j].sError) + ".png", sortedFragList[contourIdx1].Element[j].warpImg);
+				imwrite("Result0/AAA_" + to_string(sortedFragList[contourIdx1].Element[j].cIndex) + "_" + to_string(sortedFragList[contourIdx1].Element[j].iError) + "_" + to_string(sortedFragList[contourIdx1].Element[j].cError) + ".png", sortedFragList[contourIdx1].Element[j].warpImg);
 			}
-
 			// for other contour "contourIdx2" that are in the same group(contourIdx)
 			for (int g = 1; g < cNode.groupIdx[i].size(); g++) {
 				int contourIdx2 = cNode.groupIdx[i][g];
@@ -2522,40 +2577,12 @@ void QtGuiApplication1::compareWithRecipeOri(leafNode &cNode, recipe& rec2, int 
 			}
 		}
 	}
-
 	clock_t end = clock();
 	cout << "compare Time: " << end - start << ", ";
-	/*
-	for (int i = 0; i < sortedFragList.size(); i++) {
-	for (int j = 0; j < sortedFragList[i].Element.size(); j++) {
-	string cc = "Result/" + to_string(i) + "_" + to_string(j) + "_" + to_string(sortedFragList[i].Element[j].iError) + ".png";
-	imwrite(cc, sortedFragList[i].Element[j].warpImg);
-	}
-	}
-	*/
 
 	// Greedy build Start ----------------------------------------
 	cNode.sortedFragList = sortedFragList;
 	stackWithAddingOrder(cNode);
-
-	//// set error
-	//int candidateDepth = 0;
-	//double iErrorTmp = 0;
-	//for (int i = 0; i < sortedFragList.size(); i++) {
-	//	if (sortedFragList[i].Element.size()>0) {
-	//		candidateDepth++;
-	//		iErrorTmp += sortedFragList[i].Element[0].iError;
-	//	}
-	//}
-	//iErrorTmp /= (double)candidateDepth;
-	//double originError = colorError(cNode.userDraw, cNode.resultStack) + iErrorTmp;
-	//cNode.originError = originError;
-	//// set nutrient
-	//vector<int> tmpNutrient = getStrNutrient(sortedFragList, rec2);
-	//double hErr = getHealthError(tmpNutrient);
-	//double totalError = (originError*(100 - nutrient_ratio) + hErr*nutrient_ratio) / 100;
-	//cNode.totalError = totalError;
-	//cNode.nutrientVec.assign(tmpNutrient.begin(), tmpNutrient.end());
 
 	cNode.isStoredAsNode = true;
 	cNode.leafNodeVecIdx = leafNodeVec.size();
@@ -2674,7 +2701,7 @@ void QtGuiApplication1::updateResultTable(int mode) {
 
 	if (mode == 0) {
 		//line(currentTopImage, Point(10, 10), Point(10, 60), Scalar(255, 255, 255, 255), 1, 8);
-		setLabel(true, current_ptr->userDraw, current_ptr->resultStack, current_ptr->globalCenter);
+		setLabel_show(true, current_ptr->userDraw, current_ptr->resultStack, current_ptr->globalCenter);
 	}
 
 	int imgSize = ui.tableWidget_6->width() / resultIdxAmount_min;
@@ -2804,9 +2831,8 @@ vector<vector<Point>> getNewContour(Size c_inputSize, Mat &alphaImg) {
 }
 
 /* --------------------------------Pre-Processing-------------------------------- */
-void preProcess(string s_file, vector<vector<Point> >& samplePoint, string p_file, vector<vector<Mat> >& descriptor, string d_file, string d_file2, string d_file3, string d_file4) {
+void preProcess(string s_file, vector<vector<Point> >& samplePoint, string p_file) {
 	int idx = 0;
-	int count = 0;
 
 	vector<int> getSize;
 	ifstream fin(preDataDir + s_file, ios::in | ios::binary);
@@ -2820,86 +2846,22 @@ void preProcess(string s_file, vector<vector<Point> >& samplePoint, string p_fil
 		getSize.push_back(buff);
 		testM += buff;
 	}
-	vector<Mat> get_foodDesSeq = vecmatread(preDataDir + d_file);
-	vector<Mat> get_foodDesSeq2 = vecmatread(preDataDir + d_file2);
-	vector<Mat> get_foodDesSeq3 = vecmatread(preDataDir + d_file3);
-	vector<Mat> get_foodDesSeq4 = vecmatread(preDataDir + d_file4);
-	vector<Point> get_sampleResult = vecPointRead(preDataDir + p_file);
-	vector<Mat> buff_foodDesSeq;
-	vector<Point> buff_sampleResult;
 
-	cout << "get_foodDesSeq.size()= " << get_foodDesSeq.size() << endl;
-	cout << "get_foodDesSeq2.size()= " << get_foodDesSeq2.size() << endl;
-	cout << "get_foodDesSeq3.size()= " << get_foodDesSeq3.size() << endl;
-	cout << "get_foodDesSeq4.size()= " << get_foodDesSeq4.size() << endl;
+	vector<Point> get_sampleResult = vecPointRead(preDataDir + p_file);
+	vector<Point> buff_sampleResult;
 	cout << "get_sampleResult.size()= " << get_sampleResult.size() << endl;
 
-	int tmpSampleInt = 0;
-	for (int i = 0; i < get_foodDesSeq.size(); i++)	{
-		buff_foodDesSeq.push_back(get_foodDesSeq[i]);
+	int count = 0;
+	for (int i = 0; i < get_sampleResult.size(); i++)	{
 		buff_sampleResult.push_back(get_sampleResult[i]);
 		count++;
 		if (count == getSize[idx]) {
 			idx++;
 			count = 0;
-
-			descriptor.push_back(buff_foodDesSeq);
 			samplePoint.push_back(buff_sampleResult);
-			buff_foodDesSeq.clear();
 			buff_sampleResult.clear();
 		}
 	}
-
-	
-	tmpSampleInt = get_foodDesSeq.size();
-	for (int i = 0; i < get_foodDesSeq2.size(); i++)	{
-		buff_foodDesSeq.push_back(get_foodDesSeq2[i]);
-		buff_sampleResult.push_back(get_sampleResult[i + tmpSampleInt]);
-		count++;
-		if (count == getSize[idx]) {
-			idx++;
-			count = 0;
-
-			descriptor.push_back(buff_foodDesSeq);
-			samplePoint.push_back(buff_sampleResult);
-			buff_foodDesSeq.clear();
-			buff_sampleResult.clear();
-		}
-	}
-
-	tmpSampleInt += get_foodDesSeq2.size();
-	for (int i = 0; i < get_foodDesSeq3.size(); i++)	{
-		buff_foodDesSeq.push_back(get_foodDesSeq3[i]);
-		buff_sampleResult.push_back(get_sampleResult[i + tmpSampleInt]);
-		count++;
-		if (count == getSize[idx]) {
-			idx++;
-			count = 0;
-
-			descriptor.push_back(buff_foodDesSeq);
-			samplePoint.push_back(buff_sampleResult);
-			buff_foodDesSeq.clear();
-			buff_sampleResult.clear();
-		}
-	}
-
-	
-	tmpSampleInt += get_foodDesSeq3.size();
-	for (int i = 0; i < get_foodDesSeq4.size(); i++)	{
-		buff_foodDesSeq.push_back(get_foodDesSeq4[i]);
-		buff_sampleResult.push_back(get_sampleResult[i + tmpSampleInt]);
-		count++;
-		if (count == getSize[idx]) {
-			idx++;
-			count = 0;
-
-			descriptor.push_back(buff_foodDesSeq);
-			samplePoint.push_back(buff_sampleResult);
-			buff_foodDesSeq.clear();
-			buff_sampleResult.clear();
-		}
-	}
-
 }
 
 vector<Mat> vecmatread(const string& filename)
@@ -2963,8 +2925,7 @@ void getAllRecipe(string recipeDir, vector<string>& files, vector<recipe>& Recip
 	}
 }
 
-void readFoodPreData(vector<food> &totalFood)
-{
+void readFoodPreData(vector<food> &totalFoodVec) {
 	ifstream fileN(foodPreDir + "name.bin", ios::binary);
 	ifstream fileF(foodPreDir + "fileName.bin", ios::binary);
 	ifstream fileC(foodPreDir + "cate.bin", ios::binary);
@@ -3068,11 +3029,11 @@ void readFoodPreData(vector<food> &totalFood)
 		if (foodH[i * fSize + 9] == 0) { stackable = false; }
 		food.setHealth(foodH[i*fSize], foodH[i * fSize + 1], foodH[i *fSize + 2], foodH[i * fSize + 3], foodH[i *fSize + 4], foodH[i * fSize + 5], foodH[i * fSize + 6], foodH[i * fSize + 7], foodH[i * fSize + 8], stackable);
 		food.orderIdx = i;
+		//food.printInfo();
 		//food.printHealth();
 		//cout << food.name << endl;
-		totalFood.push_back(food);
+		totalFoodVec.push_back(food);
 	}
-
 }
 
 void readBinaryImg(vector<Mat> &totalImg, string fileName)
@@ -3103,76 +3064,116 @@ void readBinaryImg(vector<Mat> &totalImg, string fileName)
 	fileI.close();
 }
 
-// set nonAlphaOfFood, widthShiftLimit, heightShiftLimit
-void getOverlapRatio(vector<food> &totalFood) {
-	for (int i = 0; i < totalFood.size(); i++) {
-		// food info
-		int foodImgIdx = totalFood[i].orderIdx;
-		bool stackable = totalFood[i].stackable;
-		vector<Point> pointSeq2 = samplepointsOfFood[foodImgIdx];
-		Mat dood = totalFoodImg[totalFood[foodImgIdx].fileName].clone();
+// set widthShiftLimit, heightShiftLimit
+void getOverlapRatio(food &cFood, vector<Point> &pointSeq) {
+	// food info
+	bool stackable = cFood.stackable;
 
-		int foodContourArea = contourArea(pointSeq2);
-		Mat foodAlpha = Mat::zeros(inputSize, CV_8UC1);
-		drawContours(foodAlpha, vector<vector<Point>>(1, pointSeq2), 0, Scalar(255), CV_FILLED);
+	int foodContourArea = contourArea(pointSeq);
+	Mat foodAlpha = Mat::zeros(inputSize, CV_8UC1);
+	drawContours(foodAlpha, vector<vector<Point>>(1, pointSeq), 0, Scalar(255), CV_FILLED);
 
-		// find boundary of contour anf food, // left right top bottom // find non alpha point of food
-		vector<Point> nonAlphaOfFood;
-		Rect foodRect = getBoundaryRectAndAlpha(foodAlpha, Rect(0, 0, foodAlpha.cols, foodAlpha.rows), nonAlphaOfFood);
-		Point lastFP = Point(foodRect.x, foodRect.y);
+	// find boundary of contour anf food, // left right top bottom // find non alpha point of food
+	vector<Point> nonAlphaOfFood;
+	Rect foodRect = getBoundaryRectAndAlpha(foodAlpha, Rect(0, 0, foodAlpha.cols, foodAlpha.rows), nonAlphaOfFood);
+	Point lastFP = Point(foodRect.x, foodRect.y);
 
-		int combineFAmount = 0;
-		int tolerantOverlapArea = 0.3*foodContourArea;
+	int combineFAmount = 0;
+	int tolerantOverlapArea = 0.3*foodContourArea;
 
-		Mat testFoodWidthOverlap = Mat::zeros(Size(foodAlpha.cols * 2, foodAlpha.rows), CV_8UC1);
-		foodAlpha.copyTo(testFoodWidthOverlap(cv::Rect(0, 0, foodAlpha.cols, foodAlpha.rows)));
+	Mat testFoodWidthOverlap = Mat::zeros(Size(foodAlpha.cols * 2, foodAlpha.rows), CV_8UC1);
+	foodAlpha.copyTo(testFoodWidthOverlap(cv::Rect(0, 0, foodAlpha.cols, foodAlpha.rows)));
 
-		// find width overlap limit
-		int widthShiftLimit = foodAlpha.cols;
-		for (int w = 0; w <foodAlpha.cols; w += 3) {
-			int overlapCount = 0;
-			//Mat testWidthShift = testFoodWidthOverlap.clone();
-			for (int i = 0; i < nonAlphaOfFood.size(); i++) {
-				Point cPoint = Point(nonAlphaOfFood[i].x + w, nonAlphaOfFood[i].y);
-				if (cPoint.x >= 0 && cPoint.x < foodAlpha.cols && foodAlpha.at<uchar>(cPoint.y, cPoint.x) > 0)
-					overlapCount++;
-				//else
-					//circle(testWidthShift, cPoint, 1, 125, 2);
-			}
-			//imwrite("Result0/testWidthShift" + to_string(w) + ".png", testWidthShift);
-			if (overlapCount < tolerantOverlapArea) {
-				widthShiftLimit = w;
-				break;
-			}
+	// find width overlap limit
+	int widthShiftLimit = foodAlpha.cols;
+	for (int w = 0; w <foodAlpha.cols; w += 3) {
+		int overlapCount = 0;
+		//Mat testWidthShift = testFoodWidthOverlap.clone();
+		for (int i = 0; i < nonAlphaOfFood.size(); i++) {
+			Point cPoint = Point(nonAlphaOfFood[i].x + w, nonAlphaOfFood[i].y);
+			if (cPoint.x >= 0 && cPoint.x < foodAlpha.cols && foodAlpha.at<uchar>(cPoint.y, cPoint.x) > 0)
+				overlapCount++;
+			//else
+				//circle(testWidthShift, cPoint, 1, 125, 2);
 		}
-		//system("pause");
-
-		Mat testFoodHeightOverlap = Mat::zeros(Size(foodAlpha.cols, foodAlpha.rows * 2), CV_8UC1);
-		foodAlpha.copyTo(testFoodHeightOverlap(cv::Rect(0, 0, foodAlpha.cols, foodAlpha.rows)));
-		// find height overlap limit
-		int heightShiftLimit = foodAlpha.rows;
-		for (int h = 0; h <foodAlpha.rows; h += 3) {
-			int overlapCount = 0;
-			for (int i = 0; i < nonAlphaOfFood.size(); i++) {
-				Point cPoint = Point(nonAlphaOfFood[i].x, nonAlphaOfFood[i].y + h);
-				if (cPoint.y >= 0 && cPoint.y < foodAlpha.rows && foodAlpha.at<uchar>(cPoint.y, cPoint.x) > 0) 
-					overlapCount++;
-			}
-			if (overlapCount < tolerantOverlapArea) {
-				heightShiftLimit = h;
-				break;
-			}
+		//imwrite("Result0/testWidthShift" + to_string(w) + ".png", testWidthShift);
+		if (overlapCount < tolerantOverlapArea) {
+			widthShiftLimit = w;
+			break;
 		}
-
-		totalFood[i].rect = foodRect;
-		totalFood[i].alphaMat = foodAlpha.clone();
-		totalFood[i].nonAlphaOfFood = nonAlphaOfFood;
-		totalFood[i].widthShiftLimit = widthShiftLimit;
-		totalFood[i].heightShiftLimit = heightShiftLimit;
 	}
+	//system("pause");
+
+	Mat testFoodHeightOverlap = Mat::zeros(Size(foodAlpha.cols, foodAlpha.rows * 2), CV_8UC1);
+	foodAlpha.copyTo(testFoodHeightOverlap(cv::Rect(0, 0, foodAlpha.cols, foodAlpha.rows)));
+	// find height overlap limit
+	int heightShiftLimit = foodAlpha.rows;
+	for (int h = 0; h <foodAlpha.rows; h += 3) {
+		int overlapCount = 0;
+		for (int i = 0; i < nonAlphaOfFood.size(); i++) {
+			Point cPoint = Point(nonAlphaOfFood[i].x, nonAlphaOfFood[i].y + h);
+			if (cPoint.y >= 0 && cPoint.y < foodAlpha.rows && foodAlpha.at<uchar>(cPoint.y, cPoint.x) > 0) 
+				overlapCount++;
+		}
+		if (overlapCount < tolerantOverlapArea) {
+			heightShiftLimit = h;
+			break;
+		}
+	}
+
+	cFood.rect = foodRect;
+	cFood.alphaMat = foodAlpha.clone();
+	cFood.widthShiftLimit = widthShiftLimit;
+	cFood.heightShiftLimit = heightShiftLimit;
+	
 } 
 
+// set widthShiftLimit, heightShiftLimit
+Vec4b getFoodColor(Mat &foodImg) {
+	double blue = 0, green = 0, red = 0;
+	int count = 0;
+	for (int i = 0; i <foodImg.cols; i++) {
+		for (int j = 0; j < foodImg.rows; j++) {
+			if (foodImg.at<Vec4b>(j, i)[3]>0) {
+				blue += foodImg.at<Vec4b>(j, i)[0];
+				green += foodImg.at<Vec4b>(j, i)[1];
+				red += foodImg.at<Vec4b>(j, i)[2];
+				count++;
+			}
+		}
+	}
+	blue /= (double)count;
+	green /= (double)count;
+	red /= (double)count;
+	Vec4b c_color(blue, green, red, 255);
+	return c_color;
+}
+
 /* --------------------------------Image Processing-------------------------------- */
+Mat shiftMat(Mat &img, int shiftX, int shiftY) {
+	Mat warpImg = Mat::zeros(img.size(), img.type());
+	Mat warpingMatrix = Mat::zeros(Size(3, 2), CV_64F);
+	warpingMatrix.at<double>(0, 0) = 1;
+	warpingMatrix.at<double>(0, 1) = 0;
+	warpingMatrix.at<double>(0, 2) = shiftX;
+	warpingMatrix.at<double>(1, 0) = 0;
+	warpingMatrix.at<double>(1, 1) = 1;
+	warpingMatrix.at<double>(1, 2) = shiftY;
+	warpAffine(img, warpImg, warpingMatrix, img.size());
+	return warpImg;
+}
+
+void MatACutMatB(Rect &boundary, Mat &MatA, Mat &MatB) {
+	for (int i = boundary.x; i < boundary.x + boundary.width; i++) {
+		for (int j = boundary.y; j < boundary.y + boundary.height; j++) {
+			if (MatB.at<Vec4b>(j, i)[3]>0) {
+				MatA.at<uchar>(j, i) = 0;
+			}
+		}
+	}
+	//imwrite("Result0/MatAA.png", MatA);
+}
+
 Point2f warpPoint(Point2f prePoint, Mat &warpMat) {
 	double newWX = warpMat.at<double>(0, 0)*prePoint.x + warpMat.at<double>(0, 1)*prePoint.y + warpMat.at<double>(0, 2);
 	double newWY = warpMat.at<double>(1, 0)*prePoint.x + warpMat.at<double>(1, 1)*prePoint.y + warpMat.at<double>(1, 2);
@@ -3224,17 +3225,7 @@ void draw3Point(Size imgSize, vector<Point> &vec, vector<Point> &vec2, vector<Po
 	imwrite(str, tmp);
 }
 
-double tmpCompareWithoutDes(bool compareWhole, int iterationTimes, Size &inputSize, vector<Point> seqP1, vector<Point> seqP2, Mat &finalMat, vector<Point> &newSampleP, bool isReverse, int errorMode) {
-	//comp compDes(inputSize, isReverse);
-	//finalMat.at<double>(0, 0) = 1;
-	//finalMat.at<double>(0, 1) = 0;
-	//finalMat.at<double>(0, 2) = 0;
-	//finalMat.at<double>(1, 0) = 0;
-	//finalMat.at<double>(1, 1) = 1;
-	//finalMat.at<double>(1, 2) = 0;
-	//return compDes.icpIteration(10, finalMat, seqP1, seqP2, newSampleP, errorMode);
-	////cout << "i= " << i << ", j= " << j << ", minIcpError= " << minIcpError << endl;
-
+double tmpCompareWithoutDes(bool compareWhole, int iterationTimes, Size &inputSize, vector<Point> seqP1, vector<Point> seqP2, Mat &finalMat, vector<Point> &newSampleP, int errorMode) {
 	solver icpSolver(compareWhole, iterationTimes, inputSize, seqP2, seqP1);
 	newSampleP = icpSolver.getResultPointSeq();
 	finalMat = icpSolver.getResultMat().clone();
@@ -3328,7 +3319,7 @@ void grouping(leafNode &cNode, vector<vector<Point> > &samplepointsOfDrawReverse
 					vector<Point> sampleP_TMP = RotatePoint2(cNode.userDraw, cNode.samplepointsOfDrawOri[i], theta);
 					Mat finalMat0 = Mat::zeros(Size(3, 2), CV_64F);
 					vector<Point> newSampleP0 = sampleP_TMP;
-					double minIcpError0 = tmpCompareWithoutDes(true, 20, cNode.inputSize, samplepointsOfDrawReverse[j], sampleP_TMP, finalMat0, newSampleP0, false, 0);
+					double minIcpError0 = tmpCompareWithoutDes(true, 20, cNode.inputSize, samplepointsOfDrawReverse[j], sampleP_TMP, finalMat0, newSampleP0, 0);
 					if (minIcpError0 < minIcpError) {
 						angleIdx = theta;
 						minIcpError = minIcpError0;
@@ -3340,7 +3331,7 @@ void grouping(leafNode &cNode, vector<vector<Point> > &samplepointsOfDrawReverse
 					//system("pause");
 					Mat finalMat1 = Mat::zeros(Size(3, 2), CV_64F);
 					vector<Point> newSampleP1 = sampleP_TMP;
-					double minIcpError1 = tmpCompareWithoutDes(true, 20, cNode.inputSize, cNode.samplepointsOfDrawOri[j], sampleP_TMP, finalMat1, newSampleP1, false, 0);
+					double minIcpError1 = tmpCompareWithoutDes(true, 20, cNode.inputSize, cNode.samplepointsOfDrawOri[j], sampleP_TMP, finalMat1, newSampleP1, 0);
 					if (minIcpError1 < minIcpError) {
 						angleIdx = theta;
 						minIcpError = minIcpError1;
@@ -3503,7 +3494,7 @@ Point getCenterPoint(vector<Point> &pointSeq) {
 	return Point(tX, tY);
 }
 
-Point getCenterPoint2(Mat &img) {
+Point getCenterPointFromImg(Mat &img) {
 	vector<Point> nonAlphaP;
 	for (int i = 0; i < img.cols; i++) {
 		for (int j = 0; j < img.rows; j++) {
@@ -3622,7 +3613,7 @@ int getdir(string dir, vector<string> &files)
 	}
 	while ((dirp = readdir(dp)) != NULL)
 	{
-		files.push_back(string(dirp->d_name));
+		files.push_back(dirp->d_name);
 	}
 	closedir(dp);
 
@@ -3676,12 +3667,12 @@ Mat scaleIconImg(Mat foodImg) {
 
 //scale img icon
 Mat scaleSuggestResultImg(Mat foodImg, vector<Point> &pointVec, Vec4b &color) {
-	for (int i = 0; i < pointVec.size(); i++) {
+	/*for (int i = 0; i < pointVec.size(); i++) {
 		Point cPoint = pointVec[i];
 		if (foodImg.at<Vec4b>(cPoint.y, cPoint.x)[3] == 0) {
 			foodImg.at<Vec4b>(cPoint.y, cPoint.x) = color;
 		}
-	}
+	}*/
 	
 	//Mat newIconImg = cv::Mat(foodImg.size(), CV_8UC4);
 	////drawContours(tmpFrag.Element[k].warpImg, vector<vector<Point>>(1, *pointSeq1), 0, Scalar(255, 0, 255, 255), 2, 8);
@@ -3691,7 +3682,8 @@ Mat scaleSuggestResultImg(Mat foodImg, vector<Point> &pointVec, Vec4b &color) {
 	
 	int tmp_top, tmp_left, tmp_width, tmp_height;
 	getBorder(foodImg, tmp_top, tmp_left, tmp_width, tmp_height);
-	Mat cutMat = foodImg(Rect(tmp_left, tmp_top, tmp_width, tmp_height));
+	Mat cutMat = Mat::zeros(Size(tmp_width, tmp_height), CV_8UC4);
+	cutMat = foodImg(Rect(tmp_left, tmp_top, tmp_width, tmp_height));
 
 	double w_scale = (double)foodImg.cols / (double)tmp_width;
 	double h_scale = (double)foodImg.rows / (double)tmp_height;
@@ -3713,49 +3705,83 @@ Mat scaleSuggestResultImg(Mat foodImg, vector<Point> &pointVec, Vec4b &color) {
 }
 
 /* --------------------------------Error Function-------------------------------- */
-double colorError(Mat in_draw, Mat in_food)
-{
-	Mat draw = in_draw.clone();
-	cv::resize(draw, draw, inputSizeSmall);
-	Mat food = in_food.clone();
-	cv::resize(food, food, inputSizeSmall);
+Vec3f RGBToHSV(Vec4b RGB_color) {
+	int R = RGB_color[2], G = RGB_color[1], B = RGB_color[0];
+	int Cmax = max(max(R, G), B);
+	int Cmin = min(min(R, G), B);
+	int delta = Cmax - Cmin;
 
-	clock_t c1 = clock();
-	double score = 0.0;
-	Mat drawOri;
-	resize(draw, drawOri, food.size());
-	Mat drawAlphaBin = alphaBinary(drawOri);
-	Mat foodAlphaBin = alphaBinary(food);
-	int orValue;
-	double tmp;
-	for (int i = 0; i < drawAlphaBin.rows; i++)
-	{
-		for (int j = 0; j < drawAlphaBin.cols; j++)
-		{
-			orValue = drawAlphaBin.at<int>(i, j) | foodAlphaBin.at<int>(i, j);
-
-			if (orValue == 1)
-			{
-				Vec4b pixDraw = draw.at<Vec4b>(i, j);
-				Vec4b pixFood = food.at<Vec4b>(i, j);
-
-				tmp = sqrt(pow(pixDraw.val[0] - pixFood.val[0], 2) + pow(pixDraw.val[1] - pixFood.val[1], 2) + pow(pixDraw.val[2] - pixFood.val[2], 2));
-
-				score += tmp;
-
+	// set H value
+	double H = 0;
+	if (delta != 0) {
+		if (Cmax==R) {
+			if (G >= B) {
+				H = 60 * ((double)(G - B) / (double)delta);
+			}
+			else {
+				H = (60 * ((double)(G - B) / (double)delta)) + 360;
 			}
 		}
+		else if (Cmax == G) {
+			H = (60 * ((double)(B - R) / (double)delta)) + 120;
+		}
+		else { // Cmax == B
+			H = (60 * ((double)(R - G) / (double)delta)) + 240;
+		}
 	}
-	double denominator = pow(255, 1 / 3);
-	denominator *= 255;
 
-	clock_t c2 = clock();
-	//cout << "color error:" << c2 - c1 << endl;
-	return (score / (draw.rows*draw.cols)) / denominator;
+	// set S value
+	double S = 0;
+	if (Cmax != 0) {
+		S = 1 - ((double)Cmin / (double)Cmax);
+	}
+
+	// set V value
+	double V = Cmax;
+
+	return Vec3f(H, S, V);
+}
+
+double colorError(Vec4b contourColor, Vec4b foodColor) {
+	// HSV color
+	double h0 = RGBToHSV(contourColor)[0];
+	double h1 = RGBToHSV(foodColor)[0];
+	double hueDistance = min(abs(h1 - h0), 360 - abs(h1 - h0));
+	hueDistance /= 180;
+
+	double s0 = RGBToHSV(contourColor)[1];
+	double s1 = RGBToHSV(foodColor)[1];
+	double saturateDistance = abs(s1 - s0);
+
+	double v0 = RGBToHSV(contourColor)[2];
+	double v1 = RGBToHSV(foodColor)[2];
+	double valueDistance = abs(v1 - v0);
+	valueDistance /= 255;
+
+	double cError = sqrt(hueDistance*hueDistance + saturateDistance*saturateDistance + valueDistance*valueDistance);
+
+	/*Mat img = Mat::zeros(Size(500, 500), CV_8UC4);
+	rectangle(img, Point(0, 0), Point(250, 500), Scalar(contourColor), -1);
+	rectangle(img, Point(250, 0), Point(500, 500), Scalar(foodColor), -1);
+	imwrite("Result0/color/" + to_string(cError) + "_" + to_string(hueDistance) + "_" + to_string(saturateDistance) + "_" + to_string(valueDistance) + ".png", img);*/
+
+	return cError;
+	//return cError;
+
+	//// RGB color distance
+	//double resultScore = sqrt(pow(contourColor[0] - foodColor[0], 2) + pow(contourColor[1] - foodColor[1], 2) + pow(contourColor[2] - foodColor[2], 2));
+	//double denominator = pow(256, 2);
+	//denominator = 3 * denominator;
+	//denominator = sqrt(denominator);
+	//return (resultScore / denominator);
 }
 
 // resultStack - 3channel, foodAlpha - 1channel
 void imageOverlap(Mat &resultStack, Mat &foodAlpha, double &_iError, double &_ratio1, double &_ratio2) {
+	//Mat drawing0 = Mat::zeros(resultStack.size(), CV_8UC3);
+	//drawing0 = addTransparent(drawing0, resultStack);
+	//drawing0 = addTransparent(drawing0, foodAlpha);
+
 	int contourArea = 0, foodArea = 0, overlapArea = 0;
 	for (int i = 0; i < resultStack.cols; i += 2) {
 		for (int j = 0; j < resultStack.rows; j += 2) {
@@ -3764,11 +3790,16 @@ void imageOverlap(Mat &resultStack, Mat &foodAlpha, double &_iError, double &_ra
 				if (foodAlpha.at<Vec4b>(j, i)[3] > 0) {
 					foodArea++;
 					overlapArea++;
+					//circle(drawing0, Point(i, j), 1, Scalar(0, 255, 255), 1);
+				}
+				else {
+					//circle(drawing0, Point(i, j), 1, Scalar(0, 0, 255), 1);
 				}
 			}
 			else {
 				if (foodAlpha.at<Vec4b>(j, i)[3] > 0) {
 					foodArea++;
+					//circle(drawing0, Point(i, j), 1, Scalar(0, 255, 0), 1);
 				}
 			}
 		}
@@ -3786,11 +3817,77 @@ void imageOverlap(Mat &resultStack, Mat &foodAlpha, double &_iError, double &_ra
 		_ratio2 = (1-ratio2_tmp);
 		_iError = (1-ratio_tmp);
 	}
+	//imwrite("Result0/" + to_string(_ratio1) + "_" + to_string(_ratio2) + "_" + to_string(_iError) + ".png", drawing0);
+	//system("pause");
 }
 
+// resultStack - 3channel, foodAlpha - 1channel
+bool imageOverlapOutandFront(Mat &contourAlpha, Mat &resultStack, Mat &foodStack) {
+	//Mat drawing0 = Mat::zeros(resultStack.size(), CV_8UC3);
+	//Mat drawing1 = Mat::zeros(resultStack.size(), CV_8UC3);
+
+	int contourArea = 0, stackArea = 0, foodArea = 0;
+	int contourArea_overlap = 0, stackArea_overlap = 0;
+	for (int i = 0; i < foodStack.cols; i += 1) {
+		for (int j = 0; j < foodStack.rows; j += 1) {
+			// determine the outer contour
+			if (foodStack.at<Vec4b>(j, i)[3] > 0) { // if is in foodStack
+				foodArea++;
+				//circle(drawing0, Point(i, j), 1, Scalar(0, 255, 0), 1);
+				//circle(drawing1, Point(i, j), 1, Scalar(0, 255, 0), 1);
+				if (contourAlpha.at<uchar>(j, i)>0) { // if is in contourAlpha
+					contourArea++;
+					contourArea_overlap++;
+					//circle(drawing0, Point(i, j), 1, Scalar(0, 255, 255), 1);
+				}
+				if (resultStack.at<Vec4b>(j, i)[3] > 0) {// if is in frontAlpha
+					stackArea++;
+					stackArea_overlap++;
+					//circle(drawing1, Point(i, j), 1, Scalar(0, 255, 255), 1);
+				}
+			}
+			else {
+				if (contourAlpha.at<uchar>(j, i) > 0) { // if is in contourAlpha
+					contourArea++;
+					//circle(drawing0, Point(i, j), 1, Scalar(0, 0, 255), 1);
+				}
+				if (resultStack.at<Vec4b>(j, i)[3] > 0) { // if is in frontAlpha
+					stackArea++;
+					//circle(drawing1, Point(i, j), 1, Scalar(0, 0, 255), 1);
+				}
+			}
+		}
+	}
+	
+
+	// overlap info of contourAlpha
+	double out_ratio1 = 0, out_ratio2 = 0, out_iError = 0;
+	double ratio_tmp = (double)contourArea_overlap / (double)(contourArea + foodArea - contourArea_overlap);
+	double ratio1_tmp = (double)contourArea_overlap / (double)contourArea; // contour 
+	double ratio2_tmp = (double)contourArea_overlap / (double)foodArea; // food
+	out_ratio1 = 1 - ratio1_tmp;
+	out_ratio2 = 1 - ratio2_tmp;
+	out_iError = (1 - ratio_tmp);
+
+	// overlap info of resultStack
+	double stack_ratio1 = 0, stack_ratio2 = 0, stack_iError = 0;
+	ratio_tmp = (double)stackArea_overlap / (double)(stackArea + foodArea - contourArea_overlap);
+	ratio1_tmp = (double)stackArea_overlap / (double)stackArea; // contour 
+	ratio2_tmp = (double)stackArea_overlap / (double)foodArea; // food
+	stack_ratio1 = 1 - ratio1_tmp;
+	stack_ratio2 = 1 - ratio2_tmp;
+	stack_iError = (1 - ratio_tmp);
+
+	//imwrite("Result0/drawing0" + to_string(out_ratio2) + ".png", drawing0);
+	//imwrite("Result0/drawing1" + to_string(stack_ratio2) + ".png", drawing1);
+	//system("pause");
+
+	if (out_ratio2 < 0.3 && stack_ratio2 > 0.65)
+		return true;
+	return false;
+}
 
 void imageOverlapIndivi(vector<Point> &samplePSeq1, Mat &resultStack, double &_iError, double &_ratio1, double &_ratio2) {
-	
 	Mat foodAlphaBin = alphaBinary(resultStack);
 
 	Mat fill_1 = Mat::zeros(resultStack.size(), CV_8UC1);
@@ -3853,6 +3950,8 @@ double icpError(Mat &resultStack, vector<Point> &contour, int fIndex) {
 	}
 
 	double averageErr = totalErr / contour.size();
+	return abs(averageErr);
+
 	totalErr2 /= contour.size();
 
 	double vaError = 0;
@@ -3867,15 +3966,11 @@ double icpError(Mat &resultStack, vector<Point> &contour, int fIndex) {
 }
 
 void setAllError(frag &inputFrag, leafNode &cNode, int contourIdx) {
-	vector<Point> sampleP1 = cNode.samplepointsOfDraw[contourIdx];
-	Mat in_draw = Mat::zeros(cNode.inputSize, CV_8UC4);
-	drawContours(in_draw, cNode.contourPoint, contourIdx, Scalar(cNode.colorOfContour[contourIdx]), CV_FILLED);
-	//Mat in_draw = cNode.userDraw.clone();
-	// set color error
-	double _eError = 0;
-	double _cError = colorError(in_draw, inputFrag.warpImg);
-	double _rError = 0;
 
+	// set color error, already normalize
+	double _cError = colorError(cNode.colorOfContour[contourIdx], totalFood[inputFrag.fIndex].color);
+
+	vector<Point> sampleP1 = cNode.samplepointsOfDraw[contourIdx];
 	// set iError - overlap ratio
 	double _iError = 0;
 	double _iErrorRatio1 = 0;
@@ -3883,16 +3978,13 @@ void setAllError(frag &inputFrag, leafNode &cNode, int contourIdx) {
 	imageOverlapIndivi(sampleP1, inputFrag.warpImg, _iError, _iErrorRatio1, _iErrorRatio2);
 
 	// set icp error
-	double _icpError = icpError(inputFrag.warpImg, sampleP1, inputFrag.fIndex);
+	double _icpError, _icpVarianceError = 999;
+	_icpError = icpError(inputFrag.warpImg, sampleP1, inputFrag.fIndex);
+	if (inputFrag.fAmount == 1)
+		_icpVarianceError = inputFrag.icpVarianceError;
 
-	inputFrag.setError(_eError, _cError, _rError, _iError, _iErrorRatio1, _iErrorRatio2, _icpError);
-
-	if (inputFrag.fAmount == 1) {
-		inputFrag.sError = _icpError;
-	}
-	else {
-		inputFrag.sError = _iError;
-	}
+	inputFrag.setError(_cError, _iError, _iErrorRatio1, _iErrorRatio2, _icpError, _icpVarianceError);
+	inputFrag.sError = _cError + _iError + _icpError;
 }
 
 /* --------------------------------Comparison Value Function-------------------------------- */
@@ -3908,17 +4000,30 @@ bool compareWithiError(frag input1, frag input2) {
 	return(i<j);
 }
 
+bool compareWithiError_cError(frag input1, frag input2) {
+	double i = input1.iError*input1.cError;
+	double j = input2.iError*input2.cError;
+	return(i<j);
+}
+
 bool compareWithsError(frag input1, frag input2) {
 	double i = input1.sError;
 	double j = input2.sError;
 	return(i<j);
 }
 
-bool compareWithError_Suggest(foodSuggestedTable input1, foodSuggestedTable input2) {
-	double i, j;
-	i = input1.candidate.iError;
-	j = input2.candidate.iError;
-	return(i<j);
+bool compareWithError_Suggest(frag input1, frag input2) {
+	if (input1.fAmount == 1) {
+		if (input2.fAmount == 1)
+			return (input1.icpVarianceError < input2.icpVarianceError);
+		else
+			return true;
+	}
+	else if (input2.fAmount == 1) {
+		return false;
+	}
+
+	return(input1.iError<input2.iError);
 }
 
 /* --------------------------------Comparison Contour Function-------------------------------- */
@@ -3941,10 +4046,6 @@ int finGroupIdx(vector<vector<int> > &cGroupIdx, int idx) {
 
 // set fragList of contourIdx1 to contourIdx2
 void setFragToGroup(leafNode &cNode, int contourIdx1, fragList &fragList1, int contourIdx2, fragList &fragList2) {
-	for (int j = 0; j < fragList1.Element.size(); j++) {
-		fragList1.Element[j].warpSequence = getWholeContour(fragList1.Element[j].warpImg);
-	}
-
 	// for other contour "contourIdx2" that are in the same group(contourIdx)
 	for (int j = 0; j < fragList2.Element.size(); j++) {
 		fragList2.Element[j].cIndex = contourIdx2;
@@ -3957,54 +4058,8 @@ void setFragToGroup(leafNode &cNode, int contourIdx1, fragList &fragList1, int c
 			fragList2.Element[j].warpImg = doFlipMat(tmpWarpImg, cNode.boundaryOfContour[contourIdx2]).clone();
 		else
 			fragList2.Element[j].warpImg = tmpWarpImg.clone();
-
-		fragList2.Element[j].warpSequence = getWholeContour(fragList2.Element[j].warpImg);
 		//imwrite("Result0/"+to_string(fragList.Element[j].cIndex) + to_string(fragList.Element[j].sError) + ".png", fragList.Element[j].warpImg);
 	}
-}
-
-bool foodCombination(bool stackable, int countT, int &foodAmount, leafNode &cNode, int contourIdx, int foodImgIdx, vector<Point>& c_new_contourPoint, descri& c_descriUser, vector<Point>& c_foodPoint, vector<Mat> &c_descriFood, Mat &foodImg, Mat& resultStack, Mat alphaImg, vector<Point> &nonAlphaOfFood) {
-	countT++;
-	comp compDes(stackable, 0.4, cNode.inputSize, c_descriUser.seqDescri(), c_descriFood, c_descriUser.sampleResult(), c_foodPoint, contourIdx, foodImgIdx, foodImg, cNode.scaleRatio, nonAlphaOfFood);
-	fragList tmpPairSeq_t;
-	tmpPairSeq_t.Element = compDes.fragList2();
-
-	if (tmpPairSeq_t.Element.size() > 0) {
-		for (int m = 0; m < tmpPairSeq_t.Element.size(); m++) {
-			foodAmount += tmpPairSeq_t.Element[m].fAmount;
-			Mat resultStack_2 = tmpPairSeq_t.Element[m].warpImg;
-			resultStack = addTransparent(resultStack, resultStack_2);
-			//imwrite("Result0/__" + to_string(countT) + "_" + to_string(foodImgIdx) + "_" + to_string(m) + ".png", tmpPairSeq_t.Element[m].warpImg);
-		}
-		alphaImg = tmpPairSeq_t.Element[tmpPairSeq_t.Element.size()-1].alphaBinMat;
-	}
-	else {
-		return false;
-	}
-
-	if (c_new_contourPoint.size() == 0) {
-		return false;
-	}
-
-	bool breakOrNot = false;
-	vector<vector<Point> > new_contourPoint = getNewContour(alphaImg.size(), alphaImg);
-
-	for (int ci = 0; ci < new_contourPoint.size(); ci++) {
-		if (new_contourPoint[ci].size() == 0 || c_new_contourPoint.size() == new_contourPoint[ci].size()) {
-			breakOrNot = true;
-			break;
-		}
-		else {
-			descri tmp_descriUser(new_contourPoint[ci], 1, cNode.scaleRatio);
-			foodCombination(stackable, countT, foodAmount, cNode, contourIdx, foodImgIdx, new_contourPoint[ci], tmp_descriUser, c_foodPoint, c_descriFood, foodImg, resultStack, alphaImg, nonAlphaOfFood);
-		}
-	}
-
-	if (breakOrNot) {
-		return false;
-	}
-
-	//c_descriUser = descri(c_new_contourPoint);
 }
 
 // left right top bottom
@@ -4025,6 +4080,24 @@ Rect getBoundaryRectAndAlpha(Mat img, Rect &rect, vector<Point> &nonAlpha) {
 					bottom = j;
 			}
 		}
+	}
+	Rect newRect = Rect(left, top, right - left, bottom - top);
+	return newRect;
+}
+
+// left right top bottom
+Rect getBoundaryRectByPoint(vector<Point> &vec, Size imgSize) {
+	// count center, and border value
+	int top = imgSize.height, bottom = 0, left = imgSize.width, right = 0;
+	for (int i = 0; i < vec.size(); i++) {
+		if (vec[i].x < left)
+			left = vec[i].x;
+		if (vec[i].x > right)
+			right = vec[i].x;
+		if (vec[i].y < top)
+			top = vec[i].y;
+		if (vec[i].y > bottom)
+			bottom = vec[i].y;
 	}
 	Rect newRect = Rect(left, top, right - left, bottom - top);
 	return newRect;
@@ -4080,54 +4153,221 @@ Point2f norVec(Point pre, Point tgt, Point nxt) {
 	return Point2f(norT[0], norT[1]);
 }
 
+void twoSeqPointToWarp(vector<Point> &seq1, vector<Point> &seq2, int idx1, int idx2, int range, Mat &warpMat, double &icpError) {
+	// init seqP1 for seq1, from (idx1) ~ (idx1+range)
+	// init seqP2 for seq2, from (idx2) ~ (idx2+range)
+	vector<Point> seqP1;
+	vector<Point> seqP2;
+	for (int rr = 0; rr < range; rr++) {
+		seqP1.push_back(seq1[(idx1 + rr) % seq1.size()]);
+		seqP2.push_back(seq2[(idx2 + rr) % seq2.size()]);
+	}
+	// get warp matrix and warp pointSeq
+	solver icpSolver;
+	warpMat = icpSolver.getTwoSetsTransform(seqP2, seqP1);
+
+	// warp_seqP2 = warpMat * seqP2
+	vector<Point> warp_seqP2;
+	for (int rr = 0; rr < range; rr++)
+		warp_seqP2.push_back(warpPoint(seqP2[rr], warpMat));
+	// calculate icp error and weight error
+	icpError = icpSolver.getMinDistanceP(warp_seqP2, seqP1);
+	//double weightError = ((double)(maxRange - range + 1) / (double)maxRange)*icpError;
+}
+
+double getThetaValue(Mat &warpMatrix) {
+	double dTheta = 0;
+	double matScale = abs(sqrt(pow(warpMatrix.at<double>(0, 0), 2) + pow(warpMatrix.at<double>(0, 1), 2)));
+
+	if (warpMatrix.at<double>(0, 0)>0 && warpMatrix.at<double>(1, 0)>0) { // cos+ sin+
+		dTheta = acos(min(1.0, warpMatrix.at<double>(0, 0) / matScale));
+	}
+	else if (warpMatrix.at<double>(0, 0)>0 && warpMatrix.at<double>(1, 0)<0) { // + -
+		dTheta = asin(max(-1.0, warpMatrix.at<double>(1, 0) / matScale));
+	}
+	else if (warpMatrix.at<double>(0, 0)<0 && warpMatrix.at<double>(1, 0)>0) { // - +
+		dTheta = acos(max(-1.0, warpMatrix.at<double>(0, 0) / matScale));
+	}
+	else { // - -
+		dTheta = acos(max(-1.0, warpMatrix.at<double>(0, 0) / matScale));
+		dTheta = 2*PI - dTheta;
+	}
+	return dTheta;
+}
+
+struct warpMatrixInfo {
+	Mat warpMatrix;
+	double theta;
+	int groupflag;
+};
+
+struct warpGroupCenter {
+	double theta;
+	vector<int> group;
+};
+
+bool hasVisitAll_WarpMatrixInfo(vector<warpMatrixInfo> &warpMatrixInfoVec, int &id) {
+	for (int i = 0; i < warpMatrixInfoVec.size(); i++) {
+		if (warpMatrixInfoVec[i].groupflag < 0) {
+			id = i;
+			return false;
+		}
+	}
+	id = -1;
+	return true;
+}
+
+Mat meanShiftOfWarpMatrix(vector<warpMatrixInfo> &warpMatrixInfoVec, Mat &dood) {
+	// mean shift
+	int id = 0;
+	vector<warpGroupCenter> groupNcenter;
+	while (!hasVisitAll_WarpMatrixInfo(warpMatrixInfoVec, id)) {
+		if (id < 0) 
+			break;
+		// set new groupflag
+		int c_groupflag = groupNcenter.size();
+		// set warpMatrixInfo to presenet current center point info
+		warpMatrixInfo center_warp = warpMatrixInfoVec[id];
+		warpMatrixInfoVec[id].groupflag = c_groupflag;
+		// push element if should in this group
+		vector<int> c_Group;
+		c_Group.push_back(id);
+
+		double thetaDifferThreshold = 0.3;
+		double stopthresh = 0.3;
+		while (true) {
+			// if (distance between id-n) < radius, then they should in the same group
+			for (int n = 0; n < warpMatrixInfoVec.size(); n++) {
+				if (warpMatrixInfoVec[n].groupflag < 0) {
+					//cout << "center_warp.theta= " << center_warp.theta << ",  warpMatrixInfoVec[" << n << "].theta= " << warpMatrixInfoVec[n].theta << endl;
+					if (abs(center_warp.theta - warpMatrixInfoVec[n].theta) < thetaDifferThreshold) {
+						warpMatrixInfoVec[n].groupflag = c_groupflag;
+						c_Group.push_back(n);
+					}
+				}
+			}
+
+			// reset center point every while
+			warpMatrixInfo lastCenter = center_warp;
+			center_warp.theta = 0;
+			for (int k = 0; k < c_Group.size(); k++) {
+				center_warp.theta += warpMatrixInfoVec[c_Group[k]].theta;
+			}
+			center_warp.theta /= c_Group.size();
+
+			//cout << "lastCenter.theta= " << lastCenter.theta << ", center_warp.theta= " << center_warp.theta << endl;
+			// if new (lastCenter-newCenter) < stopthresh, break while -- stop update the center position 
+			if (stopthresh > abs(lastCenter.theta - center_warp.theta)) {
+				break;
+			}
+		}
+
+		int merge = -1;
+		for (int k = 0; k < groupNcenter.size(); k++) {
+			if ((thetaDifferThreshold / 2) > abs(center_warp.theta - groupNcenter[k].theta)) {
+				merge = k;
+				break;
+			}
+		}
+		if (merge >= 0) { //合併
+			for (int k = 0; k < c_Group.size(); k++)
+				warpMatrixInfoVec[c_Group[k]].groupflag = merge;
+			groupNcenter[merge].group.assign(c_Group.begin(), c_Group.end());
+
+			double g_theta = 0;
+			vector<int> *g_group = &groupNcenter[merge].group;
+			for (int k = 0; k < g_group->size(); k++) { // 二維資訊要保留 不能單純的distance
+				g_theta += warpMatrixInfoVec[g_group->at(k)].theta;
+			}
+			g_theta /= g_group->size();
+		}
+		else { //不合併
+			warpGroupCenter tmpGC;
+			tmpGC.group = c_Group;
+			tmpGC.theta = center_warp.theta;
+			groupNcenter.push_back(tmpGC);
+		}
+	}
+
+	int maxI = (groupNcenter.size() > 0) ? 0 : -1;
+	//cout << "groupNcenter.size()= " << groupNcenter.size() << ", maxI= " << maxI<< endl;
+	for (int m = 0; m < groupNcenter.size(); m++) {
+		if (groupNcenter[m].group.size()>groupNcenter[maxI].group.size())
+			maxI = m;
+		/*cout << "group[" << m << "]= " << groupNcenter[m].group.size() << ", theta= " << groupNcenter[m].theta << endl;
+		for (int s = 0; s < groupNcenter[m].group.size(); s++) 
+			cout << groupNcenter[m].group[s] << ", ";*/
+		/*for (int g = 0; g < groupNcenter[m].group.size(); g++) {
+			Mat warpFood = Mat::zeros(inputSize, CV_8UC4);
+			warpAffine(dood, warpFood, warpMatrixInfoVec[groupNcenter[m].group[g]].warpMatrix, inputSize);
+			imwrite("Result0/" + to_string(m) + "_" + to_string(g) + "_" + to_string(warpMatrixInfoVec[groupNcenter[m].group[g]].theta) + ".png", warpFood);
+		}*/
+	}
+
+	if (maxI >= 0) {
+		if (groupNcenter[maxI].group.size()==1)
+			return Mat();
+
+		// get median warpMatrix
+		double median_Theta = 0;
+		for (int s = 0; s < groupNcenter[maxI].group.size(); s++) {
+			median_Theta += warpMatrixInfoVec[groupNcenter[maxI].group[s]].theta;
+		}
+		median_Theta /= (double)groupNcenter[maxI].group.size();
+
+		Mat mediaWarpMat = warpMatrixInfoVec[groupNcenter[maxI].group[0]].warpMatrix;
+		mediaWarpMat.at<double>(0, 0) = cos(median_Theta);
+		mediaWarpMat.at<double>(1, 0) = sin(median_Theta);
+		mediaWarpMat.at<double>(0, 1) = -mediaWarpMat.at<double>(1, 0);
+		mediaWarpMat.at<double>(1, 1) = mediaWarpMat.at<double>(0, 0);
+
+		int medianIdx = groupNcenter[maxI].group[min(groupNcenter[maxI].group.size() - 1, groupNcenter[maxI].group.size() / 2)];
+		return mediaWarpMat;
+	}
+	else
+		return Mat();
+}
+
 // icp algorithm, stack only outer contour
-int doCombination(vector<Point> pointSeq1, vector<Point> pointSeq2, Mat &dood, Mat &resultStack) {
-	cout << "------------------------------------------------ doCombination" <<  endl;
+int doCombination(vector<Point> pointSeq1, vector<Point> pointSeq2, Mat &dood, Mat &resultStack, Mat &contourAlpha, Mat &InnerWarpMat) {
+	cout << "------------------------------------------------ doCombination6 " << endl;
+
 	// get norm of pointSeq1 vec
 	vector<Point2f> normOfPointSeq1;
 	for (int idx1 = 0; idx1 < pointSeq1.size(); idx1++) {
 		normOfPointSeq1.push_back(norVec(pointSeq1[(idx1 - 1 + pointSeq1.size()) % pointSeq1.size()], pointSeq1[idx1], pointSeq1[(idx1 + 1) % pointSeq1.size()]));
 	}
+	//// get dist value from front point of pointSeq1
+	//vector<double> distValueOfPointSeq1;
+	//for (int idx1 = 1; idx1 < pointSeq1.size(); idx1++) {
+	//	distValueOfPointSeq1.push_back(pointDist(pointSeq1[idx1 - 1], pointSeq1[idx1]));
+	//	cout << pointSeq1[idx1 - 1] << ", " << pointSeq1[idx1] << endl;
+	//}
 
 	// get norm of pointSeq2 vec
 	vector<Point2f> normOfPointSeq2;
 	for (int idx2 = 0; idx2 < pointSeq2.size(); idx2++) {
 		normOfPointSeq2.push_back(norVec(pointSeq2[(idx2 - 1 + pointSeq2.size()) % pointSeq2.size()], pointSeq2[idx2], pointSeq2[(idx2 + 1) % pointSeq2.size()]));
 	}
-	
-	clock_t s0 = clock();
-	int combineFAmount = 0;
-	Size imgSize = resultStack.size();
 
-	for (int idx1 = 0; idx1 < pointSeq1.size(); idx1++) {
-		bool fistTime = false;
+	int combineFAmount = 0;
+	int idx1 = 0;
+	int endOfIdx1 = pointSeq1.size();
+	bool firstTime = true;
+
+	vector<warpMatrixInfo> warpMatrixInfoVec;
+	while (idx1 < endOfIdx1) {
 		double min_icpError = 1500;
 		int min_idx1 = idx1;
 		int min_idx2 = 0;
 		int min_range = 0;
 		Mat min_warpMatrix;
 
-		clock_t t0 = clock();
-		for (int idx2 = 0; idx2 < pointSeq2.size(); idx2+=2) {
+		for (int idx2 = 0; idx2 < pointSeq2.size(); idx2 += 2) {
 			int range = max(3, min(pointSeq1.size(), pointSeq2.size())*0.5);
-			// init seqP1 for pointSeq1, from (idx1) ~ (idx1+range)
-			// init seqP2 for pointSeq2, from (idx2) ~ (idx2+range)
-			vector<Point> seqP1;
-			vector<Point> seqP2;
-			for (int rr = 0; rr < range; rr++) {
-				seqP1.push_back(pointSeq1[(idx1 + rr) % pointSeq1.size()]);
-				seqP2.push_back(pointSeq2[(idx2 + rr) % pointSeq2.size()]);
-			}
-			// get warp matrix and warp pointSeq
-			solver icpSolver;
-			Mat warpMat = icpSolver.getTwoSetsTransform(seqP2, seqP1);
-			// new_seqP2 = warpMat * seqP2
-			vector<Point> new_seqP2;
-			for (int rr = 0; rr < range; rr++) 
-				new_seqP2.push_back(warpPoint(seqP2[rr], warpMat));
-			// calculate icp error and weight error
-			double icpError = icpSolver.getMinDistanceP(new_seqP2, seqP1);
-			//double weightError = ((double)(maxRange - range + 1) / (double)maxRange)*icpError;
+			Mat warpMat;
+			double icpError;
+			twoSeqPointToWarp(pointSeq1, pointSeq2, idx1, idx2, range, warpMat, icpError);
 			// if current icp value is bigger that before, then break
 			if (icpError < min_icpError) {
 				// push valut to vec to deterMinimum
@@ -4138,118 +4378,213 @@ int doCombination(vector<Point> pointSeq1, vector<Point> pointSeq2, Mat &dood, M
 				min_warpMatrix = warpMat;
 			}
 		}
-		clock_t t1 = clock();
-		//cout << "t1-t0= " << t1 - t0 << endl; system("pause");
 
-		// find a candidate
-		if (min_range > 0) {
+		if (min_range > 0) { // find a candidate
 			// if stack outside, then break
-			Mat stackFood = Mat::zeros(inputSize, CV_8UC4);
-			warpAffine(dood, stackFood, min_warpMatrix, inputSize);
-			double iError = 0, ratio1 = 0, ratio2 = 0;
-			imageOverlapIndivi(pointSeq1, stackFood, iError, ratio1, ratio2);
-			double iError_2 = 0, ratio1_2 = 0, ratio2_2 = 0;
-			imageOverlap(resultStack, stackFood, iError_2, ratio1_2, ratio2_2);
+			Mat warpFood = Mat::zeros(inputSize, CV_8UC4);
+			warpAffine(dood, warpFood, min_warpMatrix, inputSize);
 
 			// if overlap range of the last element  
-			if (ratio2 < 0.3 && ratio2_2 > 0.7) {
-				// get min new_seqP1
-				vector<Point> min_seqP1;
-				vector<Point> min_seqP2;
-				for (int range = 0; range < min_range; range++) {
-					min_seqP1.push_back(pointSeq1[(min_idx1 + range) % pointSeq1.size()]);
-					min_seqP2.push_back(pointSeq2[(min_idx2 + range) % pointSeq2.size()]);
-				}
+			if (imageOverlapOutandFront(contourAlpha, resultStack, warpFood)) {
+				combineFAmount++;
+				vector<Point> new_seqP1;
+				vector<Point> add_seqP1; // use only for testing
+				vector<Point> new_seqP2;
+				vector<Point> new_warp_seqP2;
 
-				// warp to get min new_seqP2
-				vector<Point> min_new_seqP2;
-				for (int range = 0; range < min_range; range++) {
-					min_new_seqP2.push_back(warpPoint(min_seqP2[range], min_warpMatrix));
-				}
-
-				// partial icp to re shift
-				vector<Point> newSampleP;
-				tmpCompareWithoutDes(false, 5, resultStack.size(), pointSeq1, min_new_seqP2, Mat(), newSampleP, false, 1);
-
-				// get warp matrix and warp pointSeq
-				solver icpSolver;
-				min_warpMatrix = icpSolver.getTwoSetsTransform(min_seqP2, newSampleP).clone();
-				// icp warp iteration to get new_seqP2
-				for (int range = 0; range < min_range; range++) {
-					min_new_seqP2[range] = warpPoint(min_seqP2[range], min_warpMatrix);
-				}
-
+				// test and write image
+				//Mat testImg = warpFood.clone();
 				/* ---------------------------- start to decide step size ---------------------------- */
-				// calculate walk step = (every step vector of pointSeq1) * (alpha difference pointSeq1 and pointSeq2)
-				double moveDistValue = 0;
-				int max_walkStep = 1;
-				double walkStep = 1;
-				vector<Point> add_seqP1; // use for test add point correct or not
-				vector<Point> add_seqP2; // use for test add point correct or not
-
-				for (int range = 1; range < min(pointSeq1.size(), pointSeq2.size()); range++, max_walkStep++) {
-					int normIdx1 = (min_idx1 + range) % pointSeq1.size();
-					int normIdx2 = (min_idx2 + range) % pointSeq2.size();
-					Point2f normVec1 = normOfPointSeq1[normIdx1];
-					Point2f normVec2 = warpNorm(normOfPointSeq2[normIdx2], min_warpMatrix);
+				for (int rr = 0; rr < min_range / 2; rr++) {
+					new_seqP1.push_back(pointSeq1[(min_idx1 + rr) % pointSeq1.size()]);
+					new_seqP2.push_back(pointSeq2[(min_idx2 + rr) % pointSeq2.size()]);
+					new_warp_seqP2.push_back(warpPoint(pointSeq2[(min_idx2 + rr) % pointSeq2.size()], min_warpMatrix));
+				}
+				for (int rr = min_range / 2; rr < min(pointSeq1.size(), pointSeq2.size()); rr++) {
+					// info of pointSeq1
+					int c_Idx1 = (min_idx1 + rr) % pointSeq1.size();
+					Point p1 = pointSeq1[c_Idx1];
+					Point2f normVec1 = normOfPointSeq1[c_Idx1];
+					// info of pointSeq2
+					int c_Idx2 = (min_idx2 + rr) % pointSeq2.size();
+					Point p2 = warpPoint(pointSeq2[c_Idx2], min_warpMatrix);
+					Point2f normVec2 = warpNorm(normOfPointSeq2[c_Idx2], min_warpMatrix);
 					// calculate cosTheta between normVec1 and normVec2
 					double cosTheta = ((normVec1.x * normVec2.x + normVec1.y * normVec2.y) / sqrt(pow(normVec1.x, 2) + pow(normVec1.y, 2) + pow(normVec2.x, 2) + pow(normVec2.y, 2)));
-					walkStep += cosTheta;
-					if (cosTheta < 0)
+					double currentDist = (pointDist(p2, p1)*(1 - cosTheta)) / cosTheta;
+					// draw testing
+					//circle(testImg, p1, 2, Scalar(0, 0, 255, 255), 2);
+					//circle(testImg, p2, 2, Scalar(0, 255, 0, 255), 2);
+					vector<Point> normPoint1 = getNormPoint(p1, normVec1);
+					vector<Point> normPoint2 = getNormPoint(p2, normVec2);
+					//line(testImg, normPoint1[0], normPoint1[1], Scalar(0, 0, 255, 255), 1, 8);
+					//line(testImg, normPoint2[0], normPoint2[1], Scalar(0, 255, 0, 255), 1, 8);
+					if (currentDist >= 0 && currentDist < 100) {
+						new_seqP1.push_back(p1);
+						new_seqP2.push_back(pointSeq2[c_Idx2]);
+						new_warp_seqP2.push_back(p2);
+						if (rr >= min_range) {
+							add_seqP1.push_back(p1);
+							//circle(testImg, p1, 1, Scalar(255, 0, 255, 255), 1);
+						}
+					}
+					else
 						break;
-					if (range >= min_range) {
-						add_seqP1.push_back(pointSeq1[normIdx1]);
-						add_seqP2.push_back(warpPoint(pointSeq2[normIdx2], min_warpMatrix));
+					//imwrite("Result0/R_" + to_string(c_Idx1) + "_" + to_string(c_Idx2) + "_" + to_string(currentDist) + ".png", testImg);
+				}
+
+				if (firstTime) { // if thr first food, determine thr front 
+					for (int rr = 0; rr < min(pointSeq1.size(), pointSeq2.size()); rr++) {
+						// info of pointSeq1
+						int c_Idx1 = (min_idx1 - rr + pointSeq1.size()) % pointSeq1.size();
+						Point p1 = pointSeq1[c_Idx1];
+						Point2f normVec1 = normOfPointSeq1[c_Idx1];
+						// info of pointSeq2
+						int c_Idx2 = (min_idx2 - rr + pointSeq2.size()) % pointSeq2.size();
+						Point p2 = warpPoint(pointSeq2[c_Idx2], min_warpMatrix);
+						Point2f normVec2 = warpNorm(normOfPointSeq2[c_Idx2], min_warpMatrix);
+						// calculate cosTheta between normVec1 and normVec2
+						double cosTheta = ((normVec1.x * normVec2.x + normVec1.y * normVec2.y) / sqrt(pow(normVec1.x, 2) + pow(normVec1.y, 2) + pow(normVec2.x, 2) + pow(normVec2.y, 2)));
+						double currentDist = (pointDist(p2, p1)*(1 - cosTheta)) / cosTheta;
+						if (currentDist >= 0 && currentDist < 100) {
+							endOfIdx1--;
+							new_seqP1.push_back(p1);
+							new_warp_seqP2.push_back(p2);
+						}
+						else
+							break;
 					}
 				}
-				walkStep = max(1, walkStep);
 
-				// final result
-				if ((idx1 < pointSeq1.size()) || (double)(idx1 - pointSeq1.size()) < (double)(0.7*min_range)) {
-					// warp to get final image
-					Mat newFood = Mat::zeros(inputSize, CV_8UC4);
-					warpAffine(dood, newFood, min_warpMatrix, inputSize);
-					resultStack = addTransparent(resultStack, newFood);
-					// get result info
-					combineFAmount++;
-					idx1 += (int)(walkStep);
-				}
 				/* ---------------------------- end to decide step size ---------------------------- */
+				// partial icp to re shift
+				vector<Point> newSampleP;
+				tmpCompareWithoutDes(false, 5, resultStack.size(), new_seqP1, new_warp_seqP2, Mat(), newSampleP, 1);
+				if (firstTime) {
+					firstTime = false;
+					for (int popCount = 0; popCount < (pointSeq1.size() - endOfIdx1); popCount++)
+						newSampleP.pop_back();
+				}
+				// get warp matrix and warp pointSeq
+				solver icpSolver;
+				min_warpMatrix = icpSolver.getTwoSetsTransform(new_seqP2, newSampleP).clone();
+
+				// warp to get final image
+				Mat newFood = Mat::zeros(inputSize, CV_8UC4);
+				warpAffine(dood, newFood, min_warpMatrix, inputSize);
+				resultStack = addTransparent(resultStack, newFood);
+				
+				warpMatrixInfo warpInfo;
+				warpInfo.warpMatrix = min_warpMatrix.clone();
+				warpInfo.theta = getThetaValue(min_warpMatrix);
+				warpInfo.groupflag = -1;
+				warpMatrixInfoVec.push_back(warpInfo);
+
+				//cout << "last_startIdx1= " << last_startIdx1 << endl;
+				//cout << "last_startIdx1= " << last_startIdx1 << endl;
+				//cout << "range= " << (new_seqP1.size() - (min_range / 2)) << endl;
+				// walkStep
+				int walkStep = (new_seqP1.size() - (min_range / 2));
+				idx1 += max(1, walkStep);
+				//walkStep += (min_range / 2);
+				//system("pause");
+				/* ---------------------------- end ---------------------------- */
+				//// test and write image
+				//Mat wwwarpImg = Mat::zeros(inputSize, CV_8UC4);
+				//warpAffine(dood, wwwarpImg, min_warpMatrix, inputSize);
+				//// for the first element
+				//circle(wwwarpImg, new_seqP1[0], 3, Scalar(0, 0, 255, 255), 1);
+				//circle(wwwarpImg, new_seqP1[1], 2, Scalar(0, 0, 255, 255), 1);
+				//circle(wwwarpImg, new_warp_seqP2[0], 3, Scalar(0, 255, 0, 255), 1);
+				//circle(wwwarpImg, new_warp_seqP2[1], 2, Scalar(0, 255, 0, 255), 1);
+				//for (int rr = 2; rr < walkStep; rr++) {
+				//	circle(wwwarpImg, new_seqP1[rr], 2, Scalar(0, 0, 255, 255), 2);
+				//	circle(wwwarpImg, new_warp_seqP2[rr], 2, Scalar(0, 255, 0, 255), 2);
+				//}
+				////draw norm between normVec1 and normVec2
+				//for (int range = 0; range < walkStep; range++) {
+				//	int normIdx1 = (min_idx1 + range) % pointSeq1.size();
+				//	int normIdx2 = (min_idx2 + range) % pointSeq2.size();
+				//	Point2f normVec1 = normOfPointSeq1[normIdx1];
+				//	Point2f normVec2 = warpNorm(normOfPointSeq2[normIdx2], min_warpMatrix);
+				//	circle(wwwarpImg, new_seqP1[range], 3, Scalar(0, 0, 255, 255), 1);
+				//	circle(wwwarpImg, new_warp_seqP2[range], 3, Scalar(0, 255, 0, 255), 1);
+				//	vector<Point> normPoint1 = getNormPoint(new_seqP1[range], normVec1);
+				//	vector<Point> normPoint2 = getNormPoint(new_warp_seqP2[range], normVec2);
+				//	line(wwwarpImg, normPoint1[0], normPoint1[1], Scalar(0, 0, 255, 255), 1, 8);
+				//	line(wwwarpImg, normPoint2[0], normPoint2[1], Scalar(0, 255, 0, 255), 1, 8);
+				//}
+				//// use for test add point correct or not
+				//for (int rr = 0; rr < add_seqP1.size(); rr++) {
+				//	circle(wwwarpImg, add_seqP1[rr], 1, Scalar(255, 0, 255, 255), 1);
+				//}
+				//for (int range = 0; range < add_seqP1.size(); range++) {
+				//	int normIdx1 = (min_idx1 + min_range + range) % pointSeq1.size();
+				//	Point2f normVec1 = normOfPointSeq1[normIdx1];
+				//	circle(wwwarpImg, add_seqP1[range], 3, Scalar(255, 0, 255, 255), 1);
+				//	vector<Point> normPoint1 = getNormPoint(add_seqP1[range], normVec1);
+				//	line(wwwarpImg, normPoint1[0], normPoint1[1], Scalar(255, 0, 255, 255), 1, 8);
+				//}
+				//imwrite("Result0/R_" + to_string(min_idx1) + "_" + to_string(min_idx2) + "_" + to_string(min_range) + ".png", wwwarpImg);
+				//system("pause");
 			}
-		}
-		clock_t t2 = clock();
-		//cout << "t2-t1= " << t2 - t1 << endl;
+			else 
+				idx1 += 1;
+		} 
+		else 
+			idx1 += 1;
 	}
-	clock_t s1 = clock();
-	cout << "Time of doCombination6= " << s1 - s0 << endl;
+	//vector<Point> new_seqP1;
+	//vector<Point> new_seqP2;
+	//vector<Point> new_warp_seqP2;
+	//// partial icp to re shift
+	//int range = min(endOfIdx1 - last_startIdx1, pointSeq2.size());
+	//for (int rr = 0; rr < range; rr++) {
+	//	new_seqP1.push_back(pointSeq1[(last_startIdx1 + rr) % pointSeq1.size()]);
+	//	new_seqP2.push_back(pointSeq2[(last_startIdx2 + rr) % pointSeq2.size()]);
+	//	new_warp_seqP2.push_back(warpPoint(pointSeq2[(last_startIdx2 + rr) % pointSeq2.size()], lastWarpMat));
+	//}
+	//vector<Point> newSampleP;
+	//tmpCompareWithoutDes(false, 5, lastResultStack.size(), new_seqP1, new_warp_seqP2, Mat(), newSampleP, 1);
+	//// get warp matrix and warp pointSeq
+	//solver icpSolver;
+	//lastWarpMat = icpSolver.getTwoSetsTransform(new_seqP2, newSampleP).clone();
+
+	//imwrite("Result0/resultStack.png", resultStack);
+	InnerWarpMat = meanShiftOfWarpMatrix(warpMatrixInfoVec, dood).clone();
+
 	return combineFAmount;
 }
 
-// stack only inner contour
-int doCombinationInner(Rect contourRect, vector<Point> pointSeq1, Mat contourAlpha, Mat &dood, Mat &resultStack, food &cFood) {
-	Mat contourBorder = Mat::zeros(contourAlpha.size(), CV_8UC1);
-	drawContours(contourAlpha, vector<vector<Point>>(1, pointSeq1), 0, Scalar(255), 1, 8);
+// stack only inner contour, then warp to center
+int doCombinationInner(Rect contourRect, Mat &c_Alpha, Mat &contourAlpha, Mat &dood, Mat &resultStack, food &cFood, Point contourCenter) {
+	Mat currentStack = Mat::zeros(resultStack.size(), resultStack.type());
+	//imwrite("Result0/c_Alpha.png", c_Alpha);
 
-	Mat contourMatThre = contourAlpha.clone();
-	// food info
+	// food info 
 	int widthShiftLimit = cFood.widthShiftLimit;
 	int heightShiftLimit = cFood.heightShiftLimit;
 	Point lastFP = Point(cFood.rect.x, cFood.rect.y);
 
 	int combineFAmount = 0;
-
 	// set height interval amount
-	int H_amount = (contourRect.height - cFood.rect.height) / heightShiftLimit + 1;
+	int H_amount = (contourRect.height - cFood.rect.height) / heightShiftLimit + 1;;
 	if (H_amount <= 0) { H_amount = 1; }
 	// adjust H_interval
 	double H_interval = 0;
 	if (H_amount > 1)
 		H_interval = (contourRect.height - cFood.rect.height) / (H_amount - 1);
-	clock_t t3 = clock();
-	//cout << "doCombination t3 = " << t3 - t2 << endl;
-	
-	for (int h = 1; h < H_amount-1; h++) {
-		Rect c_contourRect = getWidthBoundaryRect(contourAlpha, Rect(0, (contourRect.y + h*H_interval), contourAlpha.cols, cFood.rect.height));
+	// adjust remainder size
+	int startH = contourRect.height - min(contourRect.height, ((H_amount - 1)*H_interval + cFood.rect.height));
+	int acc_H_interval = 0;
+
+	contourRect.y++;
+	for (int h = 0; h < H_amount; h++) {
+		int c_H_interval = H_interval;
+		if (h < startH)
+			c_H_interval++;
+
+		Rect c_contourRect = getWidthBoundaryRect(c_Alpha, Rect(0, (contourRect.y + acc_H_interval), c_Alpha.cols, cFood.rect.height));
 		// set width interval
 		int W_amount = (c_contourRect.width - cFood.rect.width) / widthShiftLimit + 1;
 		if (W_amount <= 0) { W_amount = 1; }
@@ -4257,180 +4592,223 @@ int doCombinationInner(Rect contourRect, vector<Point> pointSeq1, Mat contourAlp
 		double W_interval = 0;
 		if (W_amount > 1)
 			W_interval = (c_contourRect.width - cFood.rect.width) / (W_amount - 1);
+		// adjust remainder size
+		int startW = c_contourRect.width - min(c_contourRect.width, (W_amount - 1)*W_interval + cFood.rect.width);
+		int acc_W_interval = 0;
 
-		for (int w = 1; w < W_amount-1; w++) {
-			Rect cc_contourRect = getWidthBoundaryRect(contourAlpha, Rect(c_contourRect.x + w*W_interval, (contourRect.y + h*H_interval), cFood.rect.width, cFood.rect.height));
-			Mat warpFoodAlpha = Mat::zeros(contourAlpha.size(), contourAlpha.type());
-			Mat alphaTmp = contourAlpha.clone();
-			Mat resultTmp = resultStack.clone();
-			Point currentShift = Point(c_contourRect.x + w*W_interval, c_contourRect.y) - lastFP;
+		c_contourRect.x++;
+		for (int w = 0; w < W_amount; w++) {
+			int c_W_interval = W_interval;
+			if (w < startW)
+				c_W_interval++;
+
+			Rect cc_contourRect = getWidthBoundaryRect(c_Alpha, Rect(c_contourRect.x + acc_W_interval, (contourRect.y + acc_H_interval), cFood.rect.width, cFood.rect.height));
+
+			Mat warpFoodAlpha = Mat::zeros(c_Alpha.size(), c_Alpha.type());
+			Mat resultTmp = currentStack.clone();
+			Point currentShift = Point(c_contourRect.x + acc_W_interval, c_contourRect.y) - lastFP;
 
 			int lapCount = 0;
-			for (int i = 0; i < cFood.nonAlphaOfFood.size(); i++) {
-				int new_j = cFood.nonAlphaOfFood[i].y + currentShift.y;
-				int new_i = cFood.nonAlphaOfFood[i].x + currentShift.x;
-				if (new_j >= 0 && new_j < cFood.alphaMat.rows && new_i >= 0 && new_i < cFood.alphaMat.cols) {
-					if (contourMatThre.at<uchar>(new_j, new_i) != 0)
-						lapCount++;
+			Mat resultFoodMat = shiftMat(dood, currentShift.x, currentShift.y).clone();
 
-					alphaTmp.at<uchar>(new_j, new_i) = 0;
-					resultTmp.at<Vec4b>(new_j, new_i) = dood.at<Vec4b>(cFood.nonAlphaOfFood[i].y, cFood.nonAlphaOfFood[i].x);
-				}
+			resultTmp = addTransparent(resultTmp, resultFoodMat);
+
+			if ((h > 0 && h < H_amount && w>0 && w < W_amount) || imageOverlapOutandFront(contourAlpha, resultStack, resultFoodMat)) {
+				combineFAmount++;
+				currentStack = resultTmp;
 			}
-			combineFAmount++;
-			contourAlpha = alphaTmp.clone();
-			resultStack = resultTmp;
-			clock_t t6 = clock();
+			acc_W_interval += c_W_interval;
+
+			//imwrite("Result0/resultStack.png", resultStack);
+			//imwrite("Result0/contourAlpha.png", contourAlpha);
 		}
+		acc_H_interval += c_H_interval;
+	}
+
+	if (combineFAmount > 0) {
+		// move resiltStackStacl to contour center
+		Point foodStackCenter = getCenterPointFromImg(currentStack);
+		Point shiftCenter = contourCenter - foodStackCenter;
+		Mat warpCurrentStack = shiftMat(currentStack, shiftCenter.x, shiftCenter.y);
+		resultStack = addTransparent(resultStack, warpCurrentStack);
 	}
 	return combineFAmount;
 }
 
 // compare contour with descriptor and sample point
-void doCompare(bool isReverse, fragList& pairSeq, leafNode &cNode, int contourIdx, food &currentFood, bool doGridCut) {
-	cout << " cNode.scaleRatio= " << cNode.scaleRatio << endl;
+void doCompare(bool userMove, fragList& pairSeq, leafNode &cNode, int contourIdx, food &currentFood) {
 	string foodName = currentFood.name;
 	vector<food> tmpFVec = getFoodVecFromStr(foodName);
+	vector<vector<Point> > *sampleP_food = &samplepointsOfFood;
+	vector<vector<Point> > *pointsOfFood = &PointsOfFoodOri;
 
-	vector<vector<Point> > *sampleP_food;
-	vector<vector<Point> > *pointsOfFood;
-	if (!isReverse) { sampleP_food = &samplepointsOfFood; }
-	else { sampleP_food = &samplepointsOfFoodReverse; }
-	if (!isReverse) { pointsOfFood = &PointsOfFoodOri; }
-	else { pointsOfFood = &PointsOfFoodReverseOri; }
-	vector<vector<Mat> > *descri_food;
-	if (!isReverse) { descri_food = &desOfFood; }
-	else { descri_food = &desOfFoodReverse; }
-	
+	// contour info
 	int contourSize = cNode.samplepointsOfDraw[contourIdx].size();
+	int contourCArea = contourArea(cNode.samplepointsOfDraw[contourIdx]);
+	vector<Point> *pointSeq1 = &cNode.samplepointsOfDraw[contourIdx];
+	Rect contourBoundary = cNode.boundaryOfContour[contourIdx];
+	Point pointCenter = cNode.centerOfContour[contourIdx];
+	Size imgSize = cNode.inputSize;
+
+	fragList tmpFragList;
 	for (int f = 0; f < tmpFVec.size(); f++) {
-		clock_t s0 = clock();
-
-		//leafNode newNode = cNode;
-		fragList tmpFrag;
-
 		// food info 
 		int foodImgIdx = tmpFVec[f].orderIdx;
 		int foodSize = sampleP_food->at(foodImgIdx).size();
 		int foodContourArea = contourArea(sampleP_food->at(foodImgIdx));
-		bool stackable = tmpFVec[f].stackable;
-		int widthShiftLimit = tmpFVec[f].widthShiftLimit;
 		int heightShiftLimit = tmpFVec[f].heightShiftLimit;
-		vector<Mat> descri2Seq = descri_food->at(foodImgIdx);
 		vector<Point> pointSeq2 = sampleP_food->at(foodImgIdx);
 		vector<Point> pointSeq2Ori = pointsOfFood->at(foodImgIdx);
 		Mat dood = totalFoodImg[totalFood[foodImgIdx].fileName].clone();
 		Point foodCenter = getCenterPoint(pointSeq2);
-		if (isReverse) { flip(dood, dood, 1); }
 		cv::resize(dood, dood, cNode.inputSize);
+		//// test contour if their samplepoint is in the same direction
+		//Mat testContour0 = Mat::zeros(cNode.inputSize, CV_8UC4);
+		//drawContours(testContour0, vector<vector<Point>>(1, *pointSeq1), 0, Scalar(255, 0, 255, 255), 1, 8);
+		//circle(testContour0, pointSeq1->at(0), 3, Scalar(255, 0, 255, 255), 2);
+		//circle(testContour0, pointSeq1->at(3), 2, Scalar(255, 0, 255, 255), 2);
+		//imwrite("testContour0_" + to_string(contourIdx) + ".png", testContour0);
+		//Mat testContour = Mat::zeros(cNode.inputSize, CV_8UC4);
+		//drawContours(testContour, vector<vector<Point>>(1, pointSeq2), 0, Scalar(255, 255, 0, 255), 1, 8);
+		//circle(testContour, pointSeq2[0], 3, Scalar(255, 255, 0, 255), 2);
+		//circle(testContour, pointSeq2[3], 2, Scalar(255, 255, 0, 255), 2);
+		//imwrite("testContour_" + to_string(foodImgIdx) + ".png", testContour);
 
-		if (foodImgIdx == 70) {
-			// contour info
-			int contourSize = cNode.samplepointsOfDraw[contourIdx].size();
-			int contourCArea = contourArea(cNode.samplepointsOfDraw[contourIdx]);
-			vector<Mat> *descri1Seq = &cNode.desOfDraw[contourIdx];
-			vector<Point> *pointSeq1 = &cNode.samplepointsOfDraw[contourIdx];
-			Rect contourBoundary = cNode.boundaryOfContour[contourIdx];
-			Point pointCenter = cNode.centerOfContour[contourIdx];
-			Size imgSize = cNode.inputSize;
-
-			if (foodImgIdx == 77) {
-				if (!isReverse && doGridCut) {
-					comp compDes(imgSize, *pointSeq1, contourIdx, foodImgIdx, dood);
-					tmpFrag.Element = compDes.fragList2();
-				}
+		if (/*foodImgIdx == 26 && */true && (userMove || cNode.stackOfContour[contourIdx] || totalFood[tmpFVec[f].orderIdx].stackable)) {
+			if (foodImgIdx == 76) {
+				cout << "doGridCut ---------------------------- food= " << foodImgIdx << ", " << tmpFVec[f].name << endl;
+				comp compDes(imgSize, *pointSeq1, contourIdx, foodImgIdx, dood);
+				frag tmpFrag = compDes.fragList2()[0];
+				tmpFrag.fAmount = 1;
+				tmpFragList.Element.push_back(tmpFrag);
 			}
-			else if (foodImgIdx == 104 || foodImgIdx == 110 || foodImgIdx == 3) {
-				if (!isReverse && doGridCut) {
-					vector<Point> pointSeq1FullTmp;
-					Mat1b mask(imgSize, uchar(0)); // Black initialized mask, same size as 'frame'
-					ellipse(mask, pointCenter, Size(contourBoundary.width / 2, contourBoundary.height / 2), 0, 0, 360, Scalar(255), CV_FILLED, 1); // Draw white circle on mask
-					findNonZero(mask, pointSeq1FullTmp); // Find non zero points on mask, and put them in 'allpoints'
-					descri descriUser(pointSeq1FullTmp, 0, 1);
-					comp compDes(imgSize, descriUser.sampleResult(), contourIdx, foodImgIdx, dood);
+			else if (foodImgIdx == 103 || foodImgIdx == 109 || foodImgIdx == 3) {
+				cout << "doGridCut ---------------------------- food= " << foodImgIdx << ", " << tmpFVec[f].name << endl;
+				vector<Point> pointSeq1FullTmp;
+				Mat1b mask(imgSize, uchar(0)); // Black initialized mask, same size as 'frame'
+				ellipse(mask, pointCenter, Size(contourBoundary.width / 2, contourBoundary.height / 2), 0, 0, 360, Scalar(255), CV_FILLED, 1); // Draw white circle on mask
+				findNonZero(mask, pointSeq1FullTmp); // Find non zero points on mask, and put them in 'allpoints'
+				descri descriUser(pointSeq1FullTmp, 0, 1);
+				comp compDes(imgSize, descriUser.sampleResult(), contourIdx, foodImgIdx, dood);
 
-					// use icp if it is rotated
-					// food different orientation info
-					Mat finalMat = Mat::zeros(Size(3, 2), CV_64F);
-					vector<Point> newSampleP = descriUser.sampleResult();
-					double minIcpError = tmpCompareWithoutDes(true, 20, cNode.inputSize, *pointSeq1, descriUser.sampleResult(), finalMat, newSampleP, isReverse, 1);
+				// use icp if it is rotated
+				// food different orientation info
+				Mat finalMat = Mat::zeros(Size(3, 2), CV_64F);
+				vector<Point> newSampleP = descriUser.sampleResult();
+				double minIcpError = tmpCompareWithoutDes(true, 20, cNode.inputSize, *pointSeq1, descriUser.sampleResult(), finalMat, newSampleP, 1);
 
-					Mat newFood = Mat::zeros(imgSize, CV_8UC4);
-					warpAffine(compDes.fragList2()[0].warpImg, newFood, finalMat, newFood.size());
-					compDes.fragList2()[0].warpImg = newFood.clone();
+				Mat newFood = Mat::zeros(imgSize, CV_8UC4);
+				warpAffine(compDes.fragList2()[0].warpImg, newFood, finalMat, newFood.size());
+				compDes.fragList2()[0].warpImg = newFood.clone();
 
-					tmpFrag.Element = compDes.fragList2();
-				}
+				frag tmpFrag = compDes.fragList2()[0];
+				tmpFrag.fAmount = 1;
+				tmpFragList.Element.push_back(tmpFrag);
 			}
 			else {
 				// food size is similar as contour, use icp
-				int smallDis = 10;
 				int combineFAmount = 0;
-
-				if (contourCArea > foodContourArea*1.5) { //// food is far smaller than contour, use combination
+				if (contourCArea > foodContourArea*1.7) { //// food is far smaller than contour, use combination
 					cout << "combination -------------------- food= " << foodImgIdx << ", " << tmpFVec[f].name << endl;
 					Mat contourAlpha = Mat::zeros(cNode.inputSize, CV_8UC1);
 					drawContours(contourAlpha, vector<vector<Point>>(1, *pointSeq1), 0, Scalar(255), CV_FILLED);
+					Mat contourAlphaOri = contourAlpha.clone();
 					Mat resultStack = Mat::zeros(cNode.inputSize, CV_8UC4);
+					Mat InnerWarpMat;
+					combineFAmount += doCombination(*pointSeq1, pointSeq2, dood, resultStack, contourAlpha, InnerWarpMat);
 
-					combineFAmount += doCombination(*pointSeq1, pointSeq2, dood, resultStack);
-					combineFAmount += doCombinationInner(contourBoundary, *pointSeq1, contourAlpha, dood, resultStack, tmpFVec[f]);
-					
+					// find the main warpMatrix of outer food combination
+					Mat warpDood;
+					vector<Point> newWarpFood;
+					if (InnerWarpMat.size() != Size(0, 0)) {
+						warpDood = Mat::zeros(dood.size(), dood.type());
+						warpAffine(dood, warpDood, InnerWarpMat, dood.size());
+						newWarpFood = getWholeContour(warpDood);
+					}
+					else {
+						warpDood = dood.clone();
+						newWarpFood = pointSeq2;
+					}
+
+					if (newWarpFood.size() > 0) {
+						// set food overlap info
+						food cFood;
+						getOverlapRatio(cFood, newWarpFood);
+						MatACutMatB(contourBoundary, contourAlpha, resultStack);
+						vector<Point> newSeqContour = getContourBiggerThanSize(contourAlpha, 0.5*foodContourArea, pointCenter);
+
+						// stack front top left to bottom right
+						if (newSeqContour.size() > 0) {
+							Rect c_Rect = getBoundaryRectByPoint(newSeqContour, cNode.inputSize);
+							Mat c_Alpha = Mat::zeros(cNode.inputSize, CV_8UC1);
+							drawContours(c_Alpha, vector<vector<Point>>(1, newSeqContour), 0, Scalar(255), CV_FILLED);
+							combineFAmount += doCombinationInner(c_Rect, c_Alpha, contourAlphaOri, warpDood, resultStack, cFood, pointCenter);
+						}
+					}
+
 					if (combineFAmount > 1) {
-						frag fragMax;
-						fragMax.setInfo(0, 0, 0, 0, contourIdx, foodImgIdx, combineFAmount, resultStack.clone());
-						tmpFrag.Element.push_back(fragMax);
+						// shift to center
+						//Point centerOfResult = getCenterPointFromImg(resultStack);
+						//Mat trans_mat = (Mat_<double>(2, 3) << 1, 0, pointCenter.x - centerOfResult.x, 0, 1, pointCenter.y - centerOfResult.y);
+						//warpAffine(resultStack, resultStack, trans_mat, resultStack.size());
+						frag tmpFrag;
+						tmpFrag.setInfo(0, 0, 0, 0, contourIdx, foodImgIdx, combineFAmount, resultStack.clone());
+						tmpFragList.Element.push_back(tmpFrag);
+						//imwrite("Result0/" + to_string(foodImgIdx) + "_" + to_string(combineFAmount) + ".png", resultStack);
 					}
 				}
-				
-				if (combineFAmount == 0 && contourCArea*3 > foodContourArea) {
+
+				if (combineFAmount == 0 && contourCArea * 3 > foodContourArea) {
 					cout << "icp ---------------------------- food= " << foodImgIdx << ", " << tmpFVec[f].name << endl;
 					//icp
 					vector<float> rotateAngle = { 0, 90, 180, 270 };
 					vector<Mat> rotateMat;
 					vector<vector<Point> > sampleP_orientation = reScaleFood2(dood, imgSize, pointSeq2, 1, rotateAngle, rotateMat); // change pointSeq2 position with scale
+						
+					frag fragMin;
+					fragMin.setInfo(0, 0, 0, 0, contourIdx, foodImgIdx, 1, Mat());
+					double minError = 99999;
 					for (int ori = 0; ori < sampleP_orientation.size(); ori++) {
 						// food different orientation info
 						Mat finalMat = Mat::zeros(Size(3, 2), CV_64F);
 						vector<Point> newSampleP = sampleP_orientation[ori];
-						double minIcpError = tmpCompareWithoutDes(true, 20, imgSize, *pointSeq1, sampleP_orientation[ori], finalMat, newSampleP, isReverse, 1);
-
+						double minIcpError = tmpCompareWithoutDes(true, 20, imgSize, *pointSeq1, sampleP_orientation[ori], finalMat, newSampleP, 1);
 						Mat newFood = Mat::zeros(imgSize, CV_8UC4);
 						warpAffine(rotateMat[ori], newFood, finalMat, imgSize);
-						
-						frag fragMax;
-						fragMax.setInfo(0, 0, 0, 0, contourIdx, foodImgIdx, 1, newFood.clone());
-						fragMax.icpError = minIcpError;
-						tmpFrag.Element.push_back(fragMax);
+
+						if (ori == 0 || minIcpError < minError) {
+							minError = minIcpError;
+							fragMin.warpImg = newFood.clone();
+							fragMin.icpVarianceError = minIcpError;
+							//imwrite("Result0/" + to_string(foodImgIdx) + "_" + to_string(minIcpError) + ".png", newFood);
+						}
 					}
+					tmpFragList.Element.push_back(fragMin);
 				}
-
-				clock_t s1 = clock();
-				cout << "total compare time: " << s1 - s0 << endl;
 			}
 
-			// set error to all candidate
-			for (int k = 0; k < tmpFrag.Element.size(); k++) {
-				double errorBoundary = 0.6;
-				tmpFrag.Element[k].isReverse = isReverse;
-				setAllError(tmpFrag.Element[k], cNode, contourIdx);
-				tmpFrag.Element[k].scaleRatio = cNode.scaleRatio;
-				pairSeq.Element.push_back(tmpFrag.Element[k]);
-				//imwrite("Result0/" + to_string(foodImgIdx) + "_" + to_string(isReverse) + "_" + to_string(tmpFrag.Element[k].icpError) + "_" + to_string(tmpFrag.Element[k].iError) + ".png", tmpFrag.Element[k].warpImg);
-			}
+				
 		}
 
 	}
 
+	// set error to all candidate
+	for (int k = 0; k < tmpFragList.Element.size(); k++) {
+		double errorBoundary = 0.6;
+		setAllError(tmpFragList.Element[k], cNode, contourIdx);
+		tmpFragList.Element[k].scaleRatio = cNode.scaleRatio;
+
+		//imwrite("Result0/" + to_string(foodImgIdx) + "_" + to_string(tmpFragList.Element[k].fAmount) + "_" + to_string(tmpFragList.Element[k].icpError) + "_" + to_string(tmpFragList.Element[k].iError) + ".png", tmpFragList.Element[k].warpImg);
+	}
+	if (tmpFragList.Element.size()>0) {
+		sort(tmpFragList.Element.begin(), tmpFragList.Element.end(), compareWithiError);
+		pairSeq.Element.push_back(tmpFragList.Element[0]);
+	}
 	sort(pairSeq.Element.begin(), pairSeq.Element.end(), compareWithiError);
 
-
-	if (pairSeq.Element.size() > 1) {
-		pairSeq.Element.erase(pairSeq.Element.begin() + 1, pairSeq.Element.end());
-	}
 } 
 
-/* --------------------------------Testing-------------------------------- */
+/* --------------------------------End-------------------------------- */
 void test_contourMat(leafNode &cNode) {
 	RNG rng(12345);
 	vector<Scalar> colorVec;
@@ -4492,5 +4870,5 @@ void test_icp() {
 	vector<Point> newSampleP1 = sourceP;
 	leafNode cNode;
 	cNode.inputSize = userImage0.size();
-	double minIcpError1 = tmpCompareWithoutDes(true, 20, cNode.inputSize, targetP, sourceP, finalMat, newSampleP1, false, 0);
+	double minIcpError1 = tmpCompareWithoutDes(true, 20, cNode.inputSize, targetP, sourceP, finalMat, newSampleP1, 0);
 }

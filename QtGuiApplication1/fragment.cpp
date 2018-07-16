@@ -4,9 +4,8 @@
 
 #include "fragment.h"
 
-frag::frag()
-{
-
+frag::frag() {
+	hasFrag = false;
 }
 
 void frag::setInfo(int _r, int _q, int _l, double _score, int _cIndex, int _fIndex, int _fAmount, Mat _warpImg) {
@@ -20,14 +19,13 @@ void frag::setInfo(int _r, int _q, int _l, double _score, int _cIndex, int _fInd
 	warpImg = _warpImg;
 }
 
-void frag::setError(double _eError, double _cError, double _rError, double _iError, double _iErrorRatio1, double _iErrorRatio2, double _icpError) {
-	eError = _eError;
+void frag::setError(double _cError, double _iError, double _iErrorRatio1, double _iErrorRatio2, double _icpError, double _icpVarianceError) {
 	cError = _cError;
-	rError = _rError;
 	iError = _iError;
 	iErrorRatio1 = _iErrorRatio1;
 	iErrorRatio2 = _iErrorRatio2;
 	icpError = _icpError;
+	icpVarianceError = _icpVarianceError;
 	//sError = _iError + _cError;
 }
 

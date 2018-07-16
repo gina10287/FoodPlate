@@ -44,12 +44,6 @@ struct independentSide {
 	vector<Mat> descriSeq;
 };
 
-struct foodSuggestedTable {
-	int contourIdx;
-	food sFood;
-	frag candidate;
-};
-
 struct groupInfo {
 	int angle;
 	bool warpMatOrNot;
@@ -75,8 +69,8 @@ struct leafNode {
 	vector<vector<Point> > contourPoint; // get from svgImage
 	vector<vector<Point> > samplepointsOfDrawOri; // get from svgImage
 	vector<vector<Point> > samplepointsOfDraw; // get from svgImage
-	vector<vector<Mat> > desOfDraw;
-	vector<vector<foodSuggestedTable> > foodSuggestedVec;
+	vector<bool> stackOfContour; // 
+	vector<vector<frag> > foodSuggestedVec;
 
 	// grouping of contour
 	vector<vector<int> > groupIdx;
@@ -110,7 +104,7 @@ private:
 	void initClicked();
 	void openInputImage(string filePath);
 
-	void updateSuggestTable(QTableWidget *table, vector<Point> &pointVec, Vec4b &color, vector<foodSuggestedTable> &foodSuggestVec);
+	void updateSuggestTable(QTableWidget *table, vector<Point> &pointVec, Vec4b &color, vector<frag> &foodSuggestVec);
 	void updateShowTable(QTableWidget *table);
 	void updateResultTable(int mode);
 
@@ -122,14 +116,14 @@ private:
 	void ContourIndexClicked(leafNode &cNode);
 	void mouseDragOnImage(leafNode &cNode, int state, int cValue);
 
-	void compareWithRecipeOri(leafNode &cNode, recipe& rec2, int progressValue0, int progressValue1);
+	void compareWithRecipe(leafNode &cNode, recipe& rec2, int progressValue0, int progressValue1);
 	void compareWithAllFood(leafNode &cNode, int cValue);
 
 	void scaleBtn_show();
 
 	private slots:
 	void setLabelD(Mat &img);
-	void setLabel(bool hasResultStack, Mat userDraw, Mat img, Point centerOfimg);
+	void setLabel_show(bool hasResultStack, Mat userDraw, Mat img, Point centerOfimg);
 	void setLabel_input(Mat &img);
 	bool eventFilter(QObject *obj, QEvent *);
 	void QTreeWidgetClicked_Recipe(QTreeWidgetItem* item, int column);
